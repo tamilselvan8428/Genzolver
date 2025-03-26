@@ -21,18 +21,21 @@ from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
 
 # --- 🔧 Auto-Install Missing Dependencies ---
-def install_package(package):
+def install_and_import(package, module_name=None):
     try:
-        __import__(package)
+        if module_name is None:
+            module_name = package
+        __import__(module_name)
     except ImportError:
         subprocess.run([sys.executable, "-m", "pip", "install", package])
+        __import__(module_name)
 
 # Ensure required packages are installed
-install_package("google-generativeai")
-install_package("streamlit")
-install_package("selenium")
-install_package("beautifulsoup4")
-install_package("webdriver-manager")
+install_and_import("google-generativeai", "google.generativeai")
+install_and_import("streamlit")
+install_and_import("selenium")
+install_and_import("beautifulsoup4")
+install_and_import("webdriver-manager")
 
 # --- 🔐 Secure Gemini API Key ---
 API_KEY = st.secrets["api"]["gemini_key"]  # Load from Streamlit Secrets
@@ -111,22 +114,7 @@ def solve_with_gemini(pid, lang, text):
     
     try:
         res = model.generate_content(prompt)
-        sol_raw = res.text.strip()
-
-        # Remove any code fences
-        lines = sol_raw.splitlines()
-        if lines and lines[0].strip().startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip().startswith("```"):
-            lines = lines[:-1]
-
-        cleaned_solution = "\n".join(lines).strip()
-
-        # Save solution
-        st.session_state.analytics[pid]["solutions"].append(cleaned_solution)
-        st.session_state.analytics[pid]["attempts"] += 1
-
-        return cleaned_solution
+        return res.text.strip()
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
@@ -138,34 +126,21 @@ def submit_solution_and_paste(pid, lang, sol):
         return
     url = f"https://leetcode.com/problems/{slug}/"
 
-    # Setup WebDriver
     options = EdgeOptions()
     options.use_chromium = True
     options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
 
     try:
         driver = webdriver.Edge(service=EdgeService(EdgeChromiumDriverManager().install()), options=options)
         driver.get(url)
 
         WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
-        time.sleep(3)
 
-        # Paste solution into editor
-        driver.execute_script("monaco.editor.getModels()[0].setValue('');")
-        time.sleep(1)
-        escaped_sol = json.dumps(sol)
-        driver.execute_script(f"monaco.editor.getModels()[0].setValue({escaped_sol});")
+        driver.execute_script(f"monaco.editor.getModels()[0].setValue('{sol}');")
         time.sleep(2)
 
-        # Submit
         actions = ActionChains(driver)
         actions.key_down(Keys.CONTROL).send_keys(Keys.ENTER).key_up(Keys.CONTROL).perform()
-        st.info("🚀 Submitted solution (Ctrl + Enter)")
-        time.sleep(5)
-
         st.success(f"🏆 Problem {pid} submitted successfully!")
         st.session_state.solved_problems.add(pid)
 
@@ -183,7 +158,6 @@ if user_input.lower().startswith("solve leetcode"):
         if slug:
             lang = st.selectbox("Language", ["cpp", "python", "java"], index=0)
             if st.button("Generate & Submit Solution"):
-                st.session_state.problem_history.append(pid)
                 open_problem(pid)
                 text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
