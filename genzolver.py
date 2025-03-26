@@ -117,8 +117,13 @@ def auto_run_submit(pid, lang, solution):
     try:
         options = webdriver.EdgeOptions()
         options.add_argument("start-maximized")
-        driver = webdriver.Edge(options=options)
+        driver = webdriver.Edge(executable_path="/usr/local/bin/msedgedriver", options=options)
         driver.get(url)
+        options.add_argument("--headless")  # No GUI mode
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--remote-debugging-port=9222")
+
 
         # Wait for page to load
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
