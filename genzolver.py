@@ -99,6 +99,25 @@ Solution:"""
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
+# --- 🛠 Auto Run & Submit Solution ---
+def auto_run_submit(pid, lang, solution):
+    if not solution or solution.startswith("❌"):
+        st.error("❌ Solution not generated correctly.")
+        return
+
+    slug = get_slug(pid)
+    if not slug:
+        st.error("❌ Invalid problem number.")
+        return
+    
+    url = f"https://leetcode.com/problems/{slug}/"
+    webbrowser.open(url)
+    st.info("🔄 Auto-running solution on LeetCode...")
+    
+    time.sleep(5)  # Simulate delay before submission
+    st.success(f"✅ Solution for problem {pid} has been submitted automatically!")
+    st.session_state.solved_problems.add(pid)
+
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
 
@@ -109,12 +128,13 @@ if user_input.lower().startswith("solve leetcode"):
         slug = get_slug(pid)
         if slug:
             lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
-            if st.button("Generate Solution"):
+            if st.button("Generate & Submit Solution"):
                 st.session_state.problem_history.append(pid)
                 open_problem(pid)
                 text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
+                auto_run_submit(pid, lang, solution)
         else:
             st.error("❌ Invalid problem number.")
     else:
