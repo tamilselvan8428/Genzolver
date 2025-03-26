@@ -117,7 +117,7 @@ def auto_run_submit(pid, lang, solution):
     try:
         options = webdriver.EdgeOptions()
         options.add_argument("start-maximized")
-        driver = webdriver.Edge(executable_path="/usr/local/bin/msedgedriver", options=options)
+        driver = webdriver.Edge(executable_path="C:\\WebDrivers\\msedgedriver.exe", options=options)
         driver.get(url)
         options.add_argument("--headless")  # No GUI mode
         options.add_argument("--disable-gpu")
