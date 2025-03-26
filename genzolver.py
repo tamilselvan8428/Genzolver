@@ -4,6 +4,7 @@ import requests
 import time
 import os
 import json
+import subprocess
 from collections import defaultdict, deque
 import google.generativeai as genai
 from bs4 import BeautifulSoup
@@ -106,6 +107,23 @@ def solve_with_gemini(pid, lang, text):
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
+# --- 📥 WebDriver Setup ---
+def setup_webdriver():
+    driver_path = "/tmp/msedgedriver.exe"
+
+    if not os.path.exists(driver_path):
+        driver_url = "https://msedgedriver.azureedge.net/124.0.2478.67/edgedriver_win64.zip"
+        
+        try:
+            subprocess.run(["wget", driver_url, "-O", "/tmp/edgedriver.zip"], check=True)
+            subprocess.run(["unzip", "/tmp/edgedriver.zip", "-d", "/tmp/"], check=True)
+            subprocess.run(["chmod", "+x", driver_path], check=True)
+        except subprocess.CalledProcessError as e:
+            st.error(f"❌ WebDriver setup failed: {e}")
+            return None
+
+    return driver_path
+
 # --- 🛠 Submit Solution Selenium ---
 def submit_solution_and_paste(pid, lang, sol):
     slug = get_slug(pid)
@@ -114,21 +132,16 @@ def submit_solution_and_paste(pid, lang, sol):
         return
     url = f"https://leetcode.com/problems/{slug}/"
 
-    # --- Update These Paths ---
-    user_data_dir = r"C:\Users\YOUR_USERNAME\AppData\Local\Microsoft\Edge\User Data"
-    profile = "Default"
-    driver_path = r"C:\WebDrivers\msedgedriver.exe"
-
-    if not os.path.exists(driver_path):
-        st.error(f"❌ WebDriver not found: {driver_path}")
+    driver_path = setup_webdriver()
+    if not driver_path:
+        st.error("❌ WebDriver setup failed.")
         return
 
     options = EdgeOptions()
-    options.use_chromium = True
-    options.add_argument(f"--user-data-dir={user_data_dir}")
-    options.add_argument(f"--profile-directory={profile}")
-    options.add_argument("--start-maximized")
-    options.add_experimental_option("detach", True)
+    options.add_argument("--headless")  # Run in headless mode
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
     try:
         driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
@@ -149,6 +162,8 @@ def submit_solution_and_paste(pid, lang, sol):
         actions.key_down(Keys.CONTROL).send_keys(Keys.ENTER).key_up(Keys.CONTROL).perform()
         st.info("🚀 Submitted Solution!")
         time.sleep(5)
+
+        driver.quit()
 
     except WebDriverException as e:
         st.error(f"❌ Selenium Error: {e}")
