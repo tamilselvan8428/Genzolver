@@ -12,17 +12,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.edge.service import Service as EdgeService
-from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.common.action_chains import ActionChains
 
-# --- 🔐 Secure API Key Handling ---
-API_KEY = os.getenv("GEMINI_API_KEY")  # Load from environment variable
-if not API_KEY:
-    st.error("❌ Missing GEMINI_API_KEY. Set it as an environment variable.")
-    st.stop()
-
+# --- 🔐 API Key from Streamlit Secrets ---
+API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
@@ -50,6 +43,7 @@ st.session_state.setdefault("analytics", defaultdict(lambda: {"attempts": 0, "so
 st.session_state.setdefault("problem_history", deque(maxlen=10))
 st.session_state.setdefault("solved_problems", set())
 
+# --- 🔗 Utility Functions ---
 def get_slug(pid): return problems_dict.get(pid)
 
 def open_problem(pid):
@@ -61,62 +55,49 @@ def open_problem(pid):
     st.error("❌ Invalid problem number.")
     return None
 
-# --- 🤖 Solve with Gemini ---
+# --- 📝 Fetch Problem Statement ---
+def get_problem_statement(slug):
+    try:
+        query = {
+            "query": """
+            query getQuestionDetail($titleSlug: String!) {
+              question(titleSlug: $titleSlug) { content title }
+            }""",
+            "variables": {"titleSlug": slug}
+        }
+        res = requests.post("https://leetcode.com/graphql", json=query)
+        if res.status_code == 200:
+            html = res.json()["data"]["question"]["content"]
+            return BeautifulSoup(html, "html.parser").get_text()
+    except Exception as e:
+        return f"❌ GraphQL error: {e}"
+    return "❌ Failed to fetch problem."
+
+# --- 🤖 Gemini AI Solver ---
 def solve_with_gemini(pid, lang, text):
     if text.startswith("❌"):
         return "❌ Problem fetch failed."
     
     prompt = f"""Solve the following LeetCode problem in {lang}:
+Problem:  
 {text}
+Requirements:
+- Wrap the solution inside class Solution {{ public: ... }};
+- Follow the LeetCode function signature.
+- Return only the full class definition with the method inside.
 Solution:"""
+    
     try:
         res = model.generate_content(prompt)
-        return res.text.strip()
+        solution = res.text.strip()
+        
+        # Save solution
+        st.session_state.analytics[pid]["solutions"].append(solution)
+        st.session_state.analytics[pid]["attempts"] += 1
+
+        return solution
     except Exception as e:
         return f"❌ Gemini Error: {e}"
-
-# --- 🛠 Submit Solution via Headless Selenium ---
-def submit_solution_and_paste(pid, lang, sol):
-    slug = get_slug(pid)
-    if not slug:
-        st.error("❌ Invalid problem number.")
-        return
-    url = f"https://leetcode.com/problems/{slug}/"
-
-    driver_path = r"C:\WebDrivers\msedgedriver.exe"  # Path for Windows deployment
-
-    options = EdgeOptions()
-    options.use_chromium = True
-    options.add_argument("--headless")  # Run without GUI
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
-
-
-    try:
-        driver.get(url)
-        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
-        time.sleep(3)
-
-        driver.execute_script("monaco.editor.getModels()[0].setValue('');")
-        time.sleep(1)
-        driver.execute_script(f"monaco.editor.getModels()[0].setValue({json.dumps(sol)});")
-        time.sleep(2)
-        
-        editor_element = driver.find_element(By.CLASS_NAME, "monaco-editor")
-        editor_element.click()
-        ActionChains(driver).send_keys(Keys.ARROW_RIGHT).perform()
-        time.sleep(1)
-        
-        actions = ActionChains(driver)
-        actions.key_down(Keys.CONTROL).send_keys("`").key_up(Keys.CONTROL).perform()
-        time.sleep(5)
-    except WebDriverException as e:
-        st.error(f"❌ Selenium Error: {e}")
-    finally:
-        driver.quit()
 
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
@@ -128,12 +109,36 @@ if user_input.lower().startswith("solve leetcode"):
         slug = get_slug(pid)
         if slug:
             lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
-            if st.button("Generate & Submit Solution"):
-                text = "Problem statement here..."  # Replace with API fetch
+            if st.button("Generate Solution"):
+                st.session_state.problem_history.append(pid)
+                open_problem(pid)
+                text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
-                submit_solution_and_paste(pid, lang, solution)
         else:
             st.error("❌ Invalid problem number.")
     else:
         st.error("❌ Use format: Solve LeetCode [problem number]")
+elif user_input:
+    try:
+        res = model.generate_content(user_input)
+        st.chat_message("assistant").write(res.text)
+    except Exception as e:
+        st.error(f"❌ Gemini Error: {e}")
+
+# --- 📊 Analytics Display ---
+if st.button("Show Analytics"):
+    st.write("### 📈 Problem Solving Analytics")
+    for pid, data in st.session_state.analytics.items():
+        st.write(f"Problem {pid}: Attempts: {data['attempts']}")
+        for sol in data["solutions"]:
+            st.code(sol, language="cpp")
+
+# --- 🕘 History & ✅ Solved Problems ---
+if st.session_state.problem_history:
+    st.write("### 🕘 Recent Problems:")
+    for pid in reversed(st.session_state.problem_history):
+        st.write(f"- Problem {pid}")
+if st.session_state.solved_problems:
+    st.write("### ✅ Solved:")
+    st.write(", ".join(sorted(st.session_state.solved_problems)))
