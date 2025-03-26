@@ -22,13 +22,15 @@ from webdriver_manager.microsoft import EdgeChromiumDriverManager
 
 # --- 🔧 Auto-Install Missing Dependencies ---
 def install_and_import(package, module_name=None):
+    if module_name is None:
+        module_name = package
     try:
-        if module_name is None:
-            module_name = package
         __import__(module_name)
     except ImportError:
-        subprocess.run([sys.executable, "-m", "pip", "install", package])
-        __import__(module_name)
+        subprocess.run([sys.executable, "-m", "pip", "install", package], check=True)
+        import importlib
+        importlib.invalidate_caches()
+        globals()[module_name] = importlib.import_module(module_name)
 
 # Ensure required packages are installed
 install_and_import("google-generativeai", "google.generativeai")
@@ -38,7 +40,11 @@ install_and_import("beautifulsoup4")
 install_and_import("webdriver-manager")
 
 # --- 🔐 Secure Gemini API Key ---
-API_KEY = st.secrets["api"]["gemini_key"]  # Load from Streamlit Secrets
+API_KEY = os.getenv("GEMINI_API_KEY", st.secrets.get("api", {}).get("gemini_key"))
+if not API_KEY:
+    st.error("❌ Gemini API key is missing. Set it in `.streamlit/secrets.toml` or environment variables.")
+    st.stop()
+
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
@@ -49,13 +55,23 @@ st.write("Type `Solve LeetCode [problem number]` or ask me anything!")
 # --- 🗂 Cache LeetCode Problems ---
 @st.cache_data(show_spinner=False)
 def fetch_problems():
-    url = "https://leetcode.com/api/problems/all/"
+    url = "https://leetcode.com/graphql"
+    query = {
+        "query": """
+        query questionList {
+          problemsetQuestionList(limit: 1000) {
+            questions {
+              titleSlug
+              frontendQuestionId
+            }
+          }
+        }"""
+    }
     try:
-        res = requests.get(url)
+        res = requests.post(url, json=query)
         res.raise_for_status()
-        data = res.json()
-        return {str(p["stat"]["frontend_question_id"]): p["stat"]["question__title_slug"]
-                for p in data["stat_status_pairs"]}
+        data = res.json()["data"]["problemsetQuestionList"]["questions"]
+        return {str(q["frontendQuestionId"]): q["titleSlug"] for q in data}
     except requests.RequestException as e:
         st.error(f"❌ Error fetching LeetCode problems: {e}")
         return {}
@@ -68,7 +84,8 @@ st.session_state.setdefault("problem_history", deque(maxlen=10))
 st.session_state.setdefault("solved_problems", set())
 
 # --- 🔗 Utility Functions ---
-def get_slug(pid): return problems_dict.get(pid)
+def get_slug(pid):
+    return problems_dict.get(pid)
 
 def open_problem(pid):
     slug = get_slug(pid)
@@ -134,6 +151,7 @@ def submit_solution_and_paste(pid, lang, sol):
         driver = webdriver.Edge(service=EdgeService(EdgeChromiumDriverManager().install()), options=options)
         driver.get(url)
 
+        WebDriverWait(driver, 30).until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
         WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
 
         driver.execute_script(f"monaco.editor.getModels()[0].setValue('{sol}');")
@@ -146,6 +164,8 @@ def submit_solution_and_paste(pid, lang, sol):
 
     except WebDriverException as e:
         st.error(f"❌ Selenium Error: {e}")
+    finally:
+        driver.quit()
 
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
