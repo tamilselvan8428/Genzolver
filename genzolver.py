@@ -27,47 +27,19 @@ st.title("🤖 LeetCode Auto-Solver & Analytics Chatbot (Gemini AI)")
 st.write("Type Solve LeetCode [problem number] or ask me anything!")
 
 # --- 🗂 Fetch LeetCode Problems ---
-@st.cache_data(show_spinner=False)
+@st.cache_data
 def fetch_problems():
-    url = "https://leetcode.com/graphql"
-    headers = {
-        "Content-Type": "application/json",
-        "Referer": "https://leetcode.com/problemset/all/",
-        "User-Agent": "Mozilla/5.0"
-    }
-    query = {
-        "query": """
-        query {
-          problemsetQuestionList(
-            categorySlug: ""
-            filters: {},
-            limit: 50,
-            skip: 0
-          ) {
-            total
-            questions {
-              frontendQuestionId
-              titleSlug
-            }
-          }
-        }"""
-    }
-
     try:
-        res = requests.post(url, json=query, headers=headers)
-        res.raise_for_status()
-        data = res.json()
-        
-        if "data" in data and "problemsetQuestionList" in data["data"]:
-            return {str(q["frontendQuestionId"]): q["titleSlug"] for q in data["data"]["problemsetQuestionList"]["questions"]}
-        else:
-            st.error("❌ Unexpected API response format.")
-            return {}
+        res = requests.get("https://leetcode.com/api/problems/all/")
+        if res.status_code == 200:
+            data = res.json()
+            return {str(p["stat"]["frontend_question_id"]): p["stat"]["question__title_slug"]
+                    for p in data["stat_status_pairs"]}
+    except Exception as e:
+        st.error(f"❌ Error fetching problems: {e}")
+    return {}
 
-    except requests.RequestException as e:
-        st.error(f"❌ Error fetching LeetCode problems: {e}")
-        return {}
-
+problems_dict = fetch_problems()
 
 # --- 🧠 Session State ---
 st.session_state.setdefault("analytics", defaultdict(lambda: {"attempts": 0, "solutions": []}))
