@@ -37,27 +37,27 @@ def fetch_problems():
     }
     query = {
         "query": """
-        query problemsetQuestionList($limit: Int, $skip: Int) {
+        query {
           problemsetQuestionList(
             categorySlug: ""
-            limit: $limit
-            skip: $skip
-            filters: {}
+            filters: {},
+            limit: 50,
+            skip: 0
           ) {
+            total
             questions {
-              titleSlug
               frontendQuestionId
+              titleSlug
             }
           }
-        }""",
-        "variables": {"limit": 50, "skip": 0}
+        }"""
     }
 
     try:
         res = requests.post(url, json=query, headers=headers)
         res.raise_for_status()
         data = res.json()
-
+        
         if "data" in data and "problemsetQuestionList" in data["data"]:
             return {str(q["frontendQuestionId"]): q["titleSlug"] for q in data["data"]["problemsetQuestionList"]["questions"]}
         else:
@@ -68,7 +68,6 @@ def fetch_problems():
         st.error(f"❌ Error fetching LeetCode problems: {e}")
         return {}
 
-problems_dict = fetch_problems()
 
 # --- 🧠 Session State ---
 st.session_state.setdefault("analytics", defaultdict(lambda: {"attempts": 0, "solutions": []}))
