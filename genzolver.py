@@ -7,8 +7,14 @@ import time
 import os
 import json
 from collections import defaultdict, deque
-import google.generativeai as genai
-from bs4 import BeautifulSoup
+
+# ✅ Use correct import name for BeautifulSoup
+from bs4 import BeautifulSoup  
+
+# ✅ Import Google Generative AI SDK
+import google.generativeai as genai  
+
+# ✅ Selenium and WebDriver
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -19,6 +25,7 @@ from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
+
 
 # --- 🔧 Auto-Install Missing Dependencies ---
 def install_and_import(package, module_name=None):
