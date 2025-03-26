@@ -1,6 +1,5 @@
 streamlit
-requests
-beautifulsoup4
 selenium
-google-generativeai
+beautifulsoup4
 webdriver-manager
+google-generativeai
