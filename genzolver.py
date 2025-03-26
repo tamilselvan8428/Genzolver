@@ -39,13 +39,6 @@ def install_and_import(package, module_name=None):
         importlib.invalidate_caches()
         globals()[module_name] = importlib.import_module(module_name)
 
-# Ensure required packages are installed
-install_and_import("google-generativeai", "google.generativeai")
-install_and_import("streamlit")
-install_and_import("selenium")
-install_and_import("beautifulsoup4")
-install_and_import("webdriver-manager")
-
 # --- 🔐 Secure Gemini API Key ---
 API_KEY = os.getenv("GEMINI_API_KEY", st.secrets.get("api", {}).get("gemini_key"))
 if not API_KEY:
