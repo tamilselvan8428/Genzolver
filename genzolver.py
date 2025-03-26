@@ -37,30 +37,33 @@ def fetch_problems():
     }
     query = {
         "query": """
-        query {
-          problemsetQuestionListV2(
-            categorySlug: "",
-            filters: {},
-            limit: 50,
-            skip: 0
+        query problemsetQuestionList($limit: Int, $skip: Int) {
+          problemsetQuestionList(
+            categorySlug: ""
+            limit: $limit
+            skip: $skip
+            filters: {}
           ) {
             questions {
               titleSlug
               frontendQuestionId
             }
           }
-        }"""
+        }""",
+        "variables": {"limit": 50, "skip": 0}
     }
 
     try:
         res = requests.post(url, json=query, headers=headers)
         res.raise_for_status()
         data = res.json()
-        if "data" in data and "problemsetQuestionListV2" in data["data"]:
-            return {str(q["frontendQuestionId"]): q["titleSlug"] for q in data["data"]["problemsetQuestionListV2"]["questions"]}
+
+        if "data" in data and "problemsetQuestionList" in data["data"]:
+            return {str(q["frontendQuestionId"]): q["titleSlug"] for q in data["data"]["problemsetQuestionList"]["questions"]}
         else:
             st.error("❌ Unexpected API response format.")
             return {}
+
     except requests.RequestException as e:
         st.error(f"❌ Error fetching LeetCode problems: {e}")
         return {}
