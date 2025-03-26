@@ -15,9 +15,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.webdriver.common.action_chains import ActionChains
 
-# --- 🔐 Load API Key from secrets.toml ---
-API_KEY = st.secrets["GEMINI_API_KEY"]
+# --- 🔐 Gemini API Setup ---
+API_KEY = "AIzaSyAuqflDWBKYP3edhkTH69qoTKJZ_BgbNW8"
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
@@ -25,18 +26,44 @@ model = genai.GenerativeModel("gemini-1.5-pro-latest")
 st.title("🤖 LeetCode Auto-Solver & Analytics Chatbot (Gemini AI)")
 st.write("Type Solve LeetCode [problem number] or ask me anything!")
 
-# --- 🗂 Cache LeetCode Problems ---
-@st.cache_data
+# --- 🗂 Fetch LeetCode Problems ---
+@st.cache_data(show_spinner=False)
 def fetch_problems():
+    url = "https://leetcode.com/graphql"
+    headers = {
+        "Content-Type": "application/json",
+        "Referer": "https://leetcode.com/problemset/all/",
+        "User-Agent": "Mozilla/5.0"
+    }
+    query = {
+        "query": """
+        query {
+          problemsetQuestionListV2(
+            categorySlug: "",
+            filters: {},
+            limit: 50,
+            skip: 0
+          ) {
+            questions {
+              titleSlug
+              frontendQuestionId
+            }
+          }
+        }"""
+    }
+
     try:
-        res = requests.get("https://leetcode.com/api/problems/all/")
-        if res.status_code == 200:
-            data = res.json()
-            return {str(p["stat"]["frontend_question_id"]): p["stat"]["question__title_slug"]
-                    for p in data["stat_status_pairs"]}
-    except Exception as e:
-        st.error(f"❌ Error fetching problems: {e}")
-    return {}
+        res = requests.post(url, json=query, headers=headers)
+        res.raise_for_status()
+        data = res.json()
+        if "data" in data and "problemsetQuestionListV2" in data["data"]:
+            return {str(q["frontendQuestionId"]): q["titleSlug"] for q in data["data"]["problemsetQuestionListV2"]["questions"]}
+        else:
+            st.error("❌ Unexpected API response format.")
+            return {}
+    except requests.RequestException as e:
+        st.error(f"❌ Error fetching LeetCode problems: {e}")
+        return {}
 
 problems_dict = fetch_problems()
 
@@ -68,12 +95,17 @@ def get_problem_statement(slug):
             "variables": {"titleSlug": slug}
         }
         res = requests.post("https://leetcode.com/graphql", json=query)
-        if res.status_code == 200:
-            html = res.json()["data"]["question"]["content"]
+        res.raise_for_status()
+        data = res.json()
+
+        if "data" in data and "question" in data["data"]:
+            html = data["data"]["question"]["content"]
             return BeautifulSoup(html, "html.parser").get_text()
-    except Exception as e:
-        return f"❌ GraphQL error: {e}"
-    return "❌ Failed to fetch problem."
+        else:
+            return "❌ Unexpected problem format."
+
+    except requests.RequestException as e:
+        return f"❌ GraphQL API error: {e}"
 
 # --- 🤖 Gemini AI Solver ---
 def solve_with_gemini(pid, lang, text):
@@ -81,17 +113,22 @@ def solve_with_gemini(pid, lang, text):
         return "❌ Problem fetch failed."
     
     prompt = f"""Solve the following LeetCode problem in {lang}:
-Problem:  
-{text}
-Requirements:
-- Wrap the solution inside class Solution {{ public: ... }};
-- Follow the LeetCode function signature.
-- Return only the full class definition with the method inside.
-Solution:"""
     
+**Problem Description:**  
+{text}
+
+**Requirements:**
+- Implement a solution following LeetCode's function signature.
+- Wrap the solution in an appropriate class.
+- Ensure correctness and efficiency.
+- Return only the complete function/class definition.
+
+**Solution:**"""
+
     try:
         res = model.generate_content(prompt)
-        return res.text.strip()
+        sol_raw = res.text.strip()
+        return sol_raw
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
@@ -126,53 +163,19 @@ def submit_solution_and_paste(pid, lang, sol):
         WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
         time.sleep(3)
 
+        # Clear editor and paste solution
         driver.execute_script("monaco.editor.getModels()[0].setValue('');")
         time.sleep(1)
-
         escaped_sol = json.dumps(sol)
         driver.execute_script(f"monaco.editor.getModels()[0].setValue({escaped_sol});")
         time.sleep(2)
 
-        editor_element = driver.find_element(By.CLASS_NAME, "monaco-editor")
-        editor_element.click()
-        time.sleep(1)
-
-        ActionChains(driver).send_keys(Keys.ARROW_RIGHT).perform()
-        time.sleep(1)
-
+        # Run and submit
         actions = ActionChains(driver)
-        actions.key_down(Keys.CONTROL).send_keys("`").key_up(Keys.CONTROL).perform()
-        st.info("🚀 Sent Run command (Ctrl + `)")
+        actions.key_down(Keys.CONTROL).send_keys(Keys.ENTER).key_up(Keys.CONTROL).perform()
+        st.info("🚀 Submitted Solution!")
         time.sleep(5)
 
-        try:
-            result_element = WebDriverWait(driver, 25).until(
-                EC.presence_of_element_located((
-                    By.XPATH,
-                    "//div[contains(text(),'Accepted') or contains(text(),'Wrong Answer') or contains(text(),'Runtime Error') or contains(text(),'Time Limit')]"
-                ))
-            )
-            result_text = result_element.text.strip()
-            st.info(f"🧪 Run Result: {result_text}")
-
-            if "Accepted" in result_text or "Success" in result_text:
-                st.success(f"✅ Problem {pid} test cases passed!")
-
-                actions = ActionChains(driver)
-                actions.key_down(Keys.CONTROL).send_keys(Keys.ENTER).key_up(Keys.CONTROL).perform()
-                st.info("🚀 Sent Submit command (Ctrl + Enter)")
-                time.sleep(5)
-
-                result_submit = WebDriverWait(driver, 20).until(
-                    EC.presence_of_element_located((
-                        By.XPATH,
-                        "//div[contains(text(),'Accepted') or contains(text(),'Success')]"
-                    ))
-                )
-                st.success(f"🏆 Problem {pid} submitted successfully!")
-                st.session_state.solved_problems.add(pid)
-        except TimeoutException:
-            st.error("❌ Run result timed out.")
     except WebDriverException as e:
         st.error(f"❌ Selenium Error: {e}")
 
@@ -187,9 +190,19 @@ if user_input.lower().startswith("solve leetcode"):
         if slug:
             lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
             if st.button("Generate & Submit Solution"):
+                st.session_state.problem_history.append(pid)
+                open_problem(pid)
                 text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
                 submit_solution_and_paste(pid, lang, solution)
         else:
             st.error("❌ Invalid problem number.")
+    else:
+        st.error("❌ Use format: Solve LeetCode [problem number]")
+elif user_input:
+    try:
+        res = model.generate_content(user_input)
+        st.chat_message("assistant").write(res.text)
+    except Exception as e:
+        st.error(f"❌ Gemini Error: {e}")
