@@ -111,12 +111,67 @@ def auto_run_submit(pid, lang, solution):
         return
     
     url = f"https://leetcode.com/problems/{slug}/"
-    webbrowser.open(url)
-    st.info("🔄 Auto-running solution on LeetCode...")
-    
-    time.sleep(5)  # Simulate delay before submission
-    st.success(f"✅ Solution for problem {pid} has been submitted automatically!")
-    st.session_state.solved_problems.add(pid)
+    st.info(f"🌍 Opening LeetCode Problem: {url}")
+
+    # Set up Edge WebDriver
+    try:
+        options = webdriver.EdgeOptions()
+        options.add_argument("start-maximized")
+        driver = webdriver.Edge(options=options)
+        driver.get(url)
+
+        # Wait for page to load
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
+
+        # Click on "Sign In" if required
+        try:
+            sign_in_button = driver.find_element(By.XPATH, "//a[contains(text(), 'Sign In')]")
+            sign_in_button.click()
+            st.warning("⚠️ Please sign in manually, then press Continue.")
+            time.sleep(10)  # Give time for manual sign-in
+        except:
+            st.info("✅ Already signed in.")
+
+        # Select language
+        lang_selector = driver.find_element(By.CLASS_NAME, "language-selector")
+        lang_selector.click()
+        time.sleep(1)
+        lang_option = driver.find_element(By.XPATH, f"//div[text()='{lang.capitalize()}']")
+        lang_option.click()
+
+        # Locate the code editor and paste the solution
+        editor = driver.find_element(By.CLASS_NAME, "monaco-editor")
+        editor.click()
+        time.sleep(1)
+
+        # Send keyboard shortcuts to select all and replace code
+        editor.send_keys(Keys.CONTROL + "a")
+        editor.send_keys(Keys.BACKSPACE)
+        editor.send_keys(solution)
+
+        # Click "Run" button
+        run_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Run')]")
+        run_button.click()
+        st.info("🚀 Running the solution...")
+
+        # Wait for run to complete
+        time.sleep(10)  # Adjust if needed
+
+        # Click "Submit" button
+        submit_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Submit')]")
+        submit_button.click()
+        st.success(f"✅ Solution for Problem {pid} has been submitted successfully!")
+
+        # Close browser
+        time.sleep(5)
+        driver.quit()
+
+        # Add problem to solved list
+        st.session_state.solved_problems.add(pid)
+
+    except WebDriverException as e:
+        st.error(f"❌ WebDriver Error: {e}")
+
 
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
