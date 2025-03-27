@@ -117,9 +117,31 @@ Solution:"""
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
+# --- 🚀 Selenium WebDriver Setup ---
+def setup_driver():
+    options = webdriver.EdgeOptions()
+    options.add_experimental_option("detach", True)
+    driver = webdriver.Edge(options=options)
+    return driver
+
+# --- 🖱️ Automate Code Execution ---
+def automate_submission(driver, solution):
+    try:
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "CodeMirror")))
+        editor = driver.find_element(By.CLASS_NAME, "CodeMirror")
+        ActionChains(driver).move_to_element(editor).click().send_keys(Keys.CONTROL, 'a').send_keys(Keys.BACKSPACE).send_keys(solution).perform()
+        
+        time.sleep(1)
+        ActionChains(driver).send_keys(Keys.CONTROL, "'").perform()
+        time.sleep(1)
+        ActionChains(driver).send_keys(Keys.CONTROL, Keys.ENTER).perform()
+    except Exception as e:
+        st.error(f"❌ Selenium Automation Error: {e}")
+
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
 
+driver = None
 if user_input.lower().startswith("solve leetcode"):
     tokens = user_input.strip().split()
     if len(tokens) == 3 and tokens[2].isdigit():
@@ -129,34 +151,16 @@ if user_input.lower().startswith("solve leetcode"):
             lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
             if st.button("Generate Solution"):
                 st.session_state.problem_history.append(pid)
-                open_problem(pid)
+                url = open_problem(pid)
                 text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
+                
+                driver = setup_driver()
+                driver.get(url)
+                time.sleep(5)
+                automate_submission(driver, solution)
         else:
             st.error("❌ Invalid problem number or problem not found.")
     else:
         st.error("❌ Use format: Solve LeetCode [problem number]")
-elif user_input:
-    try:
-        res = model.generate_content(user_input)
-        st.chat_message("assistant").write(res.text)
-    except Exception as e:
-        st.error(f"❌ Gemini Error: {e}")
-
-# --- 📊 Analytics Display ---
-if st.button("Show Analytics"):
-    st.write("### 📈 Problem Solving Analytics")
-    for pid, data in st.session_state.analytics.items():
-        st.write(f"Problem {pid}: Attempts: {data['attempts']}")
-        for sol in data["solutions"]:
-            st.code(sol, language="cpp")
-
-# --- 🕘 History & ✅ Solved Problems ---
-if st.session_state.problem_history:
-    st.write("### 🕘 Recent Problems:")
-    for pid in reversed(st.session_state.problem_history):
-        st.write(f"- Problem {pid}")
-if st.session_state.solved_problems:
-    st.write("### ✅ Solved:")
-    st.write(", ".join(sorted(st.session_state.solved_problems)))
