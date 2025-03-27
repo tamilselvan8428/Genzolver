@@ -18,6 +18,7 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
 import time
+import undetected_chromedriver as uc
 # --- 🔐 Gemini API Setup ---
 API_KEY = "AIzaSyAuqflDWBKYP3edhkTH69qoTKJZ_BgbNW8"
 genai.configure(api_key=API_KEY)
@@ -99,6 +100,8 @@ Solution:"""
         return f"❌ Gemini Error: {e}"
 
 # --- 🚀 Submit Solution to LeetCode via Chrome ---
+import undetected_chromedriver as uc
+
 def submit_solution(pid, lang, solution):
     try:
         slug = problems_dict.get(pid)
@@ -107,15 +110,16 @@ def submit_solution(pid, lang, solution):
             return
 
         url = f"https://leetcode.com/problems/{slug}/"
-        options = ChromeOptions()
 
-        # ✅ Headless mode for cloud deployment
+        # ✅ Configure Chrome for Cloud Deployment
+        options = ChromeOptions()
         options.add_argument("--headless")  
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.binary_location = "/usr/bin/google-chrome"  # Ensure correct Chrome path
 
-        # ✅ Automatically manage WebDriver
-        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
+        # ✅ Use Undetected Chromedriver
+        driver = uc.Chrome(options=options)
 
         driver.get(url)
         time.sleep(5)  # Wait for page load
@@ -161,6 +165,7 @@ def submit_solution(pid, lang, solution):
     finally:
         driver.quit()
 
+
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
 
@@ -182,3 +187,10 @@ if user_input.lower().startswith("solve leetcode"):
             st.error("❌ Invalid problem number.")
     else:
         st.error("❌ Use format: Solve LeetCode [problem number]")
+else:
+    # 🔹 AI-Powered Answer for Any Question
+    try:
+        response = model.generate_content(user_input)  # Ask Gemini AI directly
+        st.write(response.text.strip())  # Display response
+    except Exception as e:
+        st.error(f"❌ AI Error: {e}")
