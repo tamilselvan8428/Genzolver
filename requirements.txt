@@ -1,5 +1,5 @@
-streamlit  
-selenium  
-beautifulsoup4  
-google-generativeai  
-requests  
+selenium
+webdriver-manager
+beautifulsoup4
+streamlit
+requests

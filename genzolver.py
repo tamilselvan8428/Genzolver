@@ -16,7 +16,8 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
-
+from webdriver_manager.chrome import ChromeDriverManager
+import time
 # --- 🔐 Gemini API Setup ---
 API_KEY = "AIzaSyAuqflDWBKYP3edhkTH69qoTKJZ_BgbNW8"
 genai.configure(api_key=API_KEY)
@@ -99,51 +100,64 @@ Solution:"""
 
 # --- 🚀 Submit Solution to LeetCode via Chrome ---
 def submit_solution(pid, lang, solution):
-    slug = get_slug(pid)
-    if not slug:
-        st.error("❌ Invalid problem number.")
-        return
-    url = f"https://leetcode.com/problems/{slug}/"
-
-    # Chrome WebDriver Setup
-    options = ChromeOptions()
-    options.add_argument("--start-maximized")
-    options.add_argument("--disable-popup-blocking")
-    options.add_experimental_option("detach", True)
-
-    driver = webdriver.Chrome(service=ChromeService(), options=options)
-    driver.get(url)
-
     try:
-        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
-        time.sleep(3)
-        
-        # Clear editor and paste solution
-        driver.execute_script("monaco.editor.getModels()[0].setValue('');")
-        time.sleep(1)
-        driver.execute_script(f"monaco.editor.getModels()[0].setValue({json.dumps(solution)});")
+        slug = problems_dict.get(pid)
+        if not slug:
+            st.error("❌ Invalid problem number.")
+            return
+
+        url = f"https://leetcode.com/problems/{slug}/"
+        options = ChromeOptions()
+
+        # ✅ Headless mode for cloud deployment
+        options.add_argument("--headless")  
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+
+        # ✅ Automatically manage WebDriver
+        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
+
+        driver.get(url)
+        time.sleep(5)  # Wait for page load
+
+        # ✅ Click "Sign In" (if required)
+        try:
+            signin_button = driver.find_element(By.LINK_TEXT, "Sign in")
+            signin_button.click()
+            time.sleep(5)  # Wait for login
+        except:
+            print("Already signed in.")
+
+        # ✅ Select language
+        lang_dropdown = driver.find_element(By.CLASS_NAME, "ant-select-selector")
+        lang_dropdown.click()
+        time.sleep(2)
+        lang_option = driver.find_element(By.XPATH, f"//div[text()='{lang.capitalize()}']")
+        lang_option.click()
         time.sleep(2)
 
-        # Focus editor
-        editor_element = driver.find_element(By.CLASS_NAME, "monaco-editor")
-        editor_element.click()
+        # ✅ Find the code editor & clear existing code
+        editor = driver.find_element(By.CLASS_NAME, "view-lines")
+        editor.click()
+        ActionChains(driver).key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).send_keys(Keys.BACKSPACE).perform()
         time.sleep(1)
-        
-        # Run Code (Ctrl + `)
-        actions = ActionChains(driver)
-        actions.key_down(Keys.CONTROL).send_keys("`").key_up(Keys.CONTROL).perform()
-        st.info("🚀 Running Code...")
+
+        # ✅ Paste new solution
+        ActionChains(driver).send_keys(solution).perform()
+        time.sleep(1)
+
+        # ✅ Run the code (Ctrl + Enter)
+        ActionChains(driver).key_down(Keys.CONTROL).send_keys(Keys.ENTER).key_up(Keys.CONTROL).perform()
         time.sleep(5)
 
-        # Submit Code (Ctrl + Enter)
-        actions.key_down(Keys.CONTROL).send_keys(Keys.ENTER).key_up(Keys.CONTROL).perform()
-        st.info("🚀 Submitting Code...")
-        time.sleep(5)
-        
-        st.success(f"🏆 Problem {pid} submitted successfully!")
-        st.session_state.solved_problems.add(pid)
-    except WebDriverException as e:
-        st.error(f"❌ Selenium Error: {e}")
+        # ✅ Click "Submit"
+        submit_button = driver.find_element(By.XPATH, "//button/span[text()='Submit']")
+        submit_button.click()
+        time.sleep(10)
+
+        st.success(f"✅ Solution for Problem {pid} submitted successfully!")
+    except Exception as e:
+        st.error(f"❌ Submission failed: {e}")
     finally:
         driver.quit()
 
