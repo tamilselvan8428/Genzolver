@@ -12,11 +12,14 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.edge.service import Service as EdgeService
+from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.common.exceptions import TimeoutException, WebDriverException
-from webdriver_manager.microsoft import EdgeChromiumDriverManager
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 
-# --- 🔐 API Key Retrieval (Handles Different Environments) ---
-API_KEY = os.getenv("GEMINI_API_KEY", st.secrets["GEMINI_API_KEY"])
+# --- 🔐 Gemini API Setup ---
+API_KEY = "AIzaSyAuqflDWBKYP3edhkTH69qoTKJZ_BgbNW8"
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
@@ -86,90 +89,167 @@ Requirements:
 - Wrap the solution inside class Solution {{ public: ... }};
 - Follow the LeetCode function signature.
 - Return only the full class definition with the method inside.
+- Do NOT use code fences like  or {lang}.
 Solution:"""
     
     try:
         res = model.generate_content(prompt)
-        solution = res.text.strip()
-        
-        # Save solution
-        st.session_state.analytics[pid]["solutions"].append(solution)
+        sol_raw = res.text.strip()
+
+        # --- 🧹 Extra safety: Remove any code fences just in case ---
+        lines = sol_raw.splitlines()
+
+        # Remove first line if it’s a code fence
+        if lines and lines[0].strip().startswith(""):
+            lines = lines[1:]
+
+        # Remove last line if it’s a code fence
+        if lines and lines[-1].strip().startswith(""):
+            lines = lines[:-1]
+
+        cleaned_solution = "\n".join(lines).strip()
+
+        # Save cleaned solution
+        st.session_state.analytics[pid]["solutions"].append(cleaned_solution)
         st.session_state.analytics[pid]["attempts"] += 1
 
-        return solution
+        return cleaned_solution
     except Exception as e:
         return f"❌ Gemini Error: {e}"
-
-# --- 🛠 Auto Run & Submit Solution ---
-def auto_run_submit(pid, lang, solution):
-    if not solution or solution.startswith("❌"):
-        st.error("❌ Solution not generated correctly.")
-        return
-
+# --- 🛠 Submit Solution Selenium ---
+def submit_solution_and_paste(pid, lang, sol):
     slug = get_slug(pid)
     if not slug:
         st.error("❌ Invalid problem number.")
         return
-    
     url = f"https://leetcode.com/problems/{slug}/"
-    st.info(f"🌍 Opening LeetCode Problem: {url}")
+
+    # --- Update These Paths ---
+    user_data_dir = r"C:\Users\YOUR_USERNAME\AppData\Local\Microsoft\Edge\User Data"  # <-- Update
+    profile = "Default"
+    driver_path = r"C:\WebDrivers\msedgedriver.exe"  # <-- Update
+
+    if not os.path.exists(driver_path):
+        st.error(f"❌ WebDriver not found: {driver_path}")
+        return
+
+    options = EdgeOptions()
+    options.use_chromium = True
+    options.add_argument(f"--user-data-dir={user_data_dir}")
+    options.add_argument(f"--profile-directory={profile}")
+    options.add_argument("--start-maximized")
+    options.add_experimental_option("detach", True)
 
     try:
-        options = webdriver.EdgeOptions()
-        options.add_argument("start-maximized")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
-
-        # If running on Streamlit Cloud or a server, enable headless mode
-        if "STREAMLIT_SERVER_MODE" in os.environ:
-            options.add_argument("--headless=new")  # More stable headless mode
-
-        driver = webdriver.Edge(EdgeChromiumDriverManager().install(), options=options)
+        driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
         driver.get(url)
 
-        # Wait for the editor to load
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
+        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
+        time.sleep(3)
 
-        # Select language
-        try:
-            lang_selector = driver.find_element(By.CLASS_NAME, "language-selector")
-            lang_selector.click()
-            time.sleep(1)
-            lang_option = driver.find_element(By.XPATH, f"//div[text()='{lang.capitalize()}']")
-            lang_option.click()
-        except:
-            st.warning("⚠️ Language selection failed. Defaulting to previous selection.")
-
-        # Locate the code editor and paste the solution
-        editor = driver.find_element(By.CLASS_NAME, "monaco-editor")
-        editor.click()
+        # Clear editor using JavaScript
+        driver.execute_script("monaco.editor.getModels()[0].setValue('');")
         time.sleep(1)
 
-        # Select all, delete, and paste the solution
-        editor.send_keys(Keys.CONTROL + "a")
-        editor.send_keys(Keys.BACKSPACE)
-        editor.send_keys(solution)
+        # Paste solution into editor
+        escaped_sol = json.dumps(sol)
+        driver.execute_script(f"monaco.editor.getModels()[0].setValue({escaped_sol});")
+        time.sleep(2)
 
-        # Click "Run" button
-        run_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Run')]")
-        run_button.click()
-        st.info("🚀 Running the solution...")
+        # Focus editor
+        editor_element = driver.find_element(By.CLASS_NAME, "monaco-editor")
+        editor_element.click()
+        time.sleep(1)
 
-        # Wait for execution
-        time.sleep(10)
+        # Confirm focus by sending dummy key
+        ActionChains(driver).send_keys(Keys.ARROW_RIGHT).perform()
+        time.sleep(1)
 
-        # Submit using "CTRL + ENTER"
-        submit_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Submit')]")
-        submit_button.send_keys(Keys.CONTROL, Keys.RETURN)  # Simulating Ctrl+Enter for auto-submit
+        # Run code using Ctrl + `
+        actions = ActionChains(driver)
+        actions.key_down(Keys.CONTROL).send_keys("`").key_up(Keys.CONTROL).perform()
+        st.info("🚀 Sent Run command (Ctrl + `)")
+        time.sleep(5)
 
-        st.success(f"✅ Solution for Problem {pid} has been submitted successfully!")
-        driver.quit()
+        # Wait for Run result
+        try:
+            result_element = WebDriverWait(driver, 25).until(
+                EC.presence_of_element_located((
+                    By.XPATH,
+                    "//div[contains(text(),'Accepted') or contains(text(),'Wrong Answer') or contains(text(),'Runtime Error') or contains(text(),'Time Limit')]"
+                ))
+            )
+            result_text = result_element.text.strip()
+            st.info(f"🧪 Run Result: {result_text}")
 
-        # Mark problem as solved
-        st.session_state.solved_problems.add(pid)
+            if "Accepted" in result_text or "Success" in result_text:
+                st.success(f"✅ Problem {pid} test cases passed!")
 
+                # Submit via Ctrl + Enter
+                actions = ActionChains(driver)
+                actions.key_down(Keys.CONTROL).send_keys(Keys.ENTER).key_up(Keys.CONTROL).perform()
+                st.info("🚀 Sent Submit command (Ctrl + Enter)")
+                time.sleep(5)
+
+                # Confirm submission result
+                try:
+                    result_submit = WebDriverWait(driver, 20).until(
+                        EC.presence_of_element_located((
+                            By.XPATH,
+                            "//div[contains(text(),'Accepted') or contains(text(),'Success')]"
+                        ))
+                    )
+                    st.success(f"🏆 Problem {pid} submitted successfully!")
+                    st.session_state.solved_problems.add(pid)
+                except TimeoutException:
+                    st.warning("⚠ Submission confirmation timeout.")
+            else:
+                st.error(f"❌ Test cases failed: {result_text}")
+        except TimeoutException:
+            st.error("❌ Run result timed out.")
     except WebDriverException as e:
-        st.error(f"❌ WebDriver Error: {e}")
+        st.error(f"❌ Selenium Error: {e}")
+# --- 🎯 User Input Handling ---
+user_input = st.text_input("Your command or question:")
 
+if user_input.lower().startswith("solve leetcode"):
+    tokens = user_input.strip().split()
+    if len(tokens) == 3 and tokens[2].isdigit():
+        pid = tokens[2]
+        slug = get_slug(pid)
+        if slug:
+            lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
+            if st.button("Generate & Submit Solution"):
+                st.session_state.problem_history.append(pid)
+                open_problem(pid)
+                text = get_problem_statement(slug)
+                solution = solve_with_gemini(pid, lang, text)
+                st.code(solution, language=lang)
+                submit_solution_and_paste(pid, lang, solution)
+        else:
+            st.error("❌ Invalid problem number.")
+    else:
+        st.error("❌ Use format: Solve LeetCode [problem number]")
+elif user_input:
+    try:
+        res = model.generate_content(user_input)
+        st.chat_message("assistant").write(res.text)
+    except Exception as e:
+        st.error(f"❌ Gemini Error: {e}")
 
-# The rest of the code remains unchanged
+# --- 📊 Analytics Display ---
+if st.button("Show Analytics"):
+    st.write("### 📈 Problem Solving Analytics")
+    for pid, data in st.session_state.analytics.items():
+        st.write(f"Problem {pid}: Attempts: {data['attempts']}")
+        for sol in data["solutions"]:
+            st.code(sol, language="cpp")
+
+# --- 🕘 History & ✅ Solved Problems ---
+if st.session_state.problem_history:
+    st.write("### 🕘 Recent Problems:")
+    for pid in reversed(st.session_state.problem_history):
+        st.write(f"- Problem {pid}")
+if st.session_state.solved_problems:
+    st.write("### ✅ Solved:")
+    st.write(", ".join(sorted(st.session_state.solved_problems)))
