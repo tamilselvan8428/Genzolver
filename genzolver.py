@@ -17,7 +17,7 @@ from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
-
+import zipfile
 # --- 🔐 Gemini API Setup ---
 API_KEY = "AIzaSyAuqflDWBKYP3edhkTH69qoTKJZ_BgbNW8"
 genai.configure(api_key=API_KEY)
@@ -127,7 +127,23 @@ def submit_solution_and_paste(pid, lang, sol):
     # --- Update These Paths ---
     user_data_dir = r"C:\Users\YOUR_USERNAME\AppData\Local\Microsoft\Edge\User Data"  # <-- Update
     profile = "Default"
-    driver_path = r"C:\WebDrivers\msedgedriver.exe"  # <-- Update
+    driver_path = r"C:\WebDrivers\msedgedriver.exe" 
+
+def setup_webdriver():
+    if not os.path.exists(driver_path):
+        print("🔄 Downloading Edge WebDriver...")
+        url = "https://msedgedriver.azureedge.net/119.0.0.0/edgedriver_win64.zip"  # Update version dynamically
+        response = requests.get(url, stream=True)
+        with open("edgedriver.zip", "wb") as f:
+            f.write(response.content)
+
+        with zipfile.ZipFile("edgedriver.zip", "r") as zip_ref:
+            zip_ref.extractall("C:\\WebDrivers\\")
+
+        os.remove("edgedriver.zip")
+        print("✅ Edge WebDriver Installed!")
+
+    setup_webdriver() # <-- Update
 
     if not os.path.exists(driver_path):
         st.error(f"❌ WebDriver not found: {driver_path}")
