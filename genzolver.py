@@ -52,36 +52,85 @@ def get_slug(pid):
     return problems_dict.get(pid)
 
 # --- 🛠 WebDriver Setup ---
+# --- 🛠 WebDriver Setup ---
 def setup_webdriver():
-    driver_path = "C:\\WebDrivers\\msedgedriver.exe"
-    if os.path.exists(driver_path):
-        return driver_path
-    st.error("❌ Edge WebDriver not found! Please install it manually.")
-    return None
+    if "webdriver_path" not in st.session_state:
+        st.session_state["webdriver_path"] = "C:\\WebDrivers\\msedgedriver.exe"
 
+    driver_path = st.session_state["webdriver_path"]
 
-# --- 🌐 Open LeetCode Problem ---
+    if not os.path.exists(driver_path):
+        st.warning("❌ Edge WebDriver not found!")
+        new_path = st.text_input("Enter WebDriver Path:", driver_path)
+        if st.button("Save Path"):
+            st.session_state["webdriver_path"] = new_path
+            st.success("✅ WebDriver path updated!")
+            return new_path
+        return None
+    return driver_path
+
+# --- 🌐 Open LeetCode Problem with Recovery ---
 def open_problem(pid):
     slug = get_slug(pid)
-    if slug:
-        url = f"https://leetcode.com/problems/{slug}/"
-        st.info(f"🌐 Opening {url} in Edge...")
-
-        driver_path = setup_webdriver()
-        options = EdgeOptions()
-        options.use_chromium = True
-        options.add_argument("--start-maximized")
-        options.add_experimental_option("detach", True)  # Keep Edge open
-
-        try:
-            driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
-            driver.get(url)
-            return driver  # Return driver for later use
-        except WebDriverException as e:
-            st.error(f"❌ Edge could not open: {e}")
-    else:
+    if not slug:
         st.error("❌ Invalid problem number.")
+        return None
+
+    url = f"https://leetcode.com/problems/{slug}/"
+    st.info(f"🌐 Opening {url} in Edge...")
+
+    driver_path = setup_webdriver()
+    if not driver_path:
+        return None
+
+    options = EdgeOptions()
+    options.use_chromium = True
+    options.add_argument("--start-maximized")
+    options.add_experimental_option("detach", True)
+
+    try:
+        driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
+        driver.get(url)
+        return driver  # Return driver for later use
+
+    except WebDriverException as e:
+        st.error(f"❌ Edge could not open: {e}")
+
+        # Recovery Options
+        retry = st.button("🔄 Retry Opening Edge")
+        switch_to_chrome = st.button("🌍 Switch to Chrome")
+
+        if retry:
+            return open_problem(pid)  # Retry opening Edge
+
+        if switch_to_chrome:
+            st.session_state["use_chrome"] = True
+            return open_problem_chrome(pid)  # Switch to Chrome
+
     return None
+
+# --- 🌍 Alternative: Open in Chrome ---
+def open_problem_chrome(pid):
+    slug = get_slug(pid)
+    if not slug:
+        st.error("❌ Invalid problem number.")
+        return None
+
+    url = f"https://leetcode.com/problems/{slug}/"
+    st.info(f"🌍 Opening {url} in Chrome...")
+
+    options = webdriver.ChromeOptions()
+    options.add_argument("--start-maximized")
+    options.add_experimental_option("detach", True)
+
+    try:
+        driver = webdriver.Chrome(options=options)
+        driver.get(url)
+        return driver
+    except WebDriverException as e:
+        st.error(f"❌ Chrome could not open: {e}")
+    return None
+
 
 # --- 📝 Fetch Problem Statement ---
 def get_problem_statement(slug):
