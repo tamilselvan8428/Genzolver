@@ -4,6 +4,7 @@ import requests
 import time
 import os
 import json
+import zipfile
 from collections import defaultdict, deque
 import google.generativeai as genai
 from bs4 import BeautifulSoup
@@ -16,10 +17,9 @@ from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.common.keys import Keys
-import zipfile
+
 # --- 🔐 Gemini API Setup ---
-API_KEY = "AIzaSyAuqflDWBKYP3edhkTH69qoTKJZ_BgbNW8"
+API_KEY = "YOUR_GEMINI_API_KEY"
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
@@ -48,13 +48,54 @@ st.session_state.setdefault("problem_history", deque(maxlen=10))
 st.session_state.setdefault("solved_problems", set())
 
 # --- 🔗 Utility Functions ---
-def get_slug(pid): return problems_dict.get(pid)
+def get_slug(pid): 
+    return problems_dict.get(pid)
 
+# --- 🛠 WebDriver Setup ---
+def setup_webdriver():
+    driver_folder = "C:\\WebDrivers"
+    driver_path = os.path.join(driver_folder, "msedgedriver.exe")
+
+    # If driver exists, return the path
+    if os.path.exists(driver_path):
+        return driver_path
+
+    st.info("🔄 Downloading Edge WebDriver...")
+
+    # Get latest Edge version
+    try:
+        edge_version_url = "https://edgeupdates.microsoft.com/api/products?view=enterprise"
+        edge_versions = requests.get(edge_version_url).json()
+        latest_version = edge_versions[0]["versions"][0]["version"]
+        driver_url = f"https://msedgedriver.azureedge.net/{latest_version}/edgedriver_win64.zip"
+
+        # Download WebDriver
+        response = requests.get(driver_url, stream=True)
+        zip_path = os.path.join(driver_folder, "edgedriver.zip")
+
+        with open(zip_path, "wb") as f:
+            f.write(response.content)
+
+        # Extract WebDriver
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(driver_folder)
+
+        os.remove(zip_path)  # Clean up
+        st.success("✅ Edge WebDriver Installed!")
+
+    except Exception as e:
+        st.error(f"❌ WebDriver download failed: {e}")
+
+    return driver_path
+
+# --- 🌐 Open LeetCode Problem ---
 def open_problem(pid):
     slug = get_slug(pid)
     if slug:
         url = f"https://leetcode.com/problems/{slug}/"
         st.info(f"🌐 Opening {url} in Edge...")
+
+        driver_path = setup_webdriver()
         options = EdgeOptions()
         options.use_chromium = True
         options.add_argument("--start-maximized")
@@ -63,13 +104,12 @@ def open_problem(pid):
         try:
             driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
             driver.get(url)
-            return driver  # Return the driver to use later
+            return driver  # Return driver for later use
         except WebDriverException as e:
             st.error(f"❌ Edge could not open: {e}")
     else:
         st.error("❌ Invalid problem number.")
     return None
-
 
 # --- 📝 Fetch Problem Statement ---
 def get_problem_statement(slug):
@@ -89,7 +129,7 @@ def get_problem_statement(slug):
         return f"❌ GraphQL error: {e}"
     return "❌ Failed to fetch problem."
 
-# --- 🤖 Gemini AI Solver ---
+# --- 🤖 Generate Solution with Gemini AI ---
 def solve_with_gemini(pid, lang, text):
     if text.startswith("❌"):
         return "❌ Problem fetch failed."
@@ -98,7 +138,7 @@ def solve_with_gemini(pid, lang, text):
 Problem:  
 {text}
 Requirements:
-- Wrap the solution inside class Solution {{ public: ... }};
+- Wrap the solution inside class Solution {{ public: ... }}.
 - Follow the LeetCode function signature.
 - Return only the full class definition with the method inside.
 - Do NOT use code fences like  or {lang}.
@@ -106,137 +146,16 @@ Solution:"""
     
     try:
         res = model.generate_content(prompt)
-        sol_raw = res.text.strip()
+        solution = res.text.strip()
 
-        # --- 🧹 Extra safety: Remove any code fences just in case ---
-        lines = sol_raw.splitlines()
-
-        # Remove first line if it’s a code fence
-        if lines and lines[0].strip().startswith(""):
-            lines = lines[1:]
-
-        # Remove last line if it’s a code fence
-        if lines and lines[-1].strip().startswith(""):
-            lines = lines[:-1]
-
-        cleaned_solution = "\n".join(lines).strip()
-
-        # Save cleaned solution
-        st.session_state.analytics[pid]["solutions"].append(cleaned_solution)
+        # Save solution in session state
+        st.session_state.analytics[pid]["solutions"].append(solution)
         st.session_state.analytics[pid]["attempts"] += 1
 
-        return cleaned_solution
+        return solution
     except Exception as e:
         return f"❌ Gemini Error: {e}"
-# --- 🛠 Submit Solution Selenium ---
-def submit_solution_and_paste(pid, lang, sol):
-    slug = get_slug(pid)
-    if not slug:
-        st.error("❌ Invalid problem number.")
-        return
-    url = f"https://leetcode.com/problems/{slug}/"
 
-    # --- Update These Paths ---
-    user_data_dir = r"C:\Users\YOUR_USERNAME\AppData\Local\Microsoft\Edge\User Data"  # <-- Update
-    profile = "Default"
-    driver_path = r"C:\WebDrivers\msedgedriver.exe" 
-
-def setup_webdriver():
-    if not os.path.exists(driver_path):
-        print("🔄 Downloading Edge WebDriver...")
-        url = "https://msedgedriver.azureedge.net/119.0.0.0/edgedriver_win64.zip"  # Update version dynamically
-        response = requests.get(url, stream=True)
-        with open("edgedriver.zip", "wb") as f:
-            f.write(response.content)
-
-        with zipfile.ZipFile("edgedriver.zip", "r") as zip_ref:
-            zip_ref.extractall("C:\\WebDrivers\\")
-
-        os.remove("edgedriver.zip")
-        print("✅ Edge WebDriver Installed!")
-
-    setup_webdriver() # <-- Update
-
-    if not os.path.exists(driver_path):
-        st.error(f"❌ WebDriver not found: {driver_path}")
-        return
-
-    options = EdgeOptions()
-    options.use_chromium = True
-    options.add_argument(f"--user-data-dir={user_data_dir}")
-    options.add_argument(f"--profile-directory={profile}")
-    options.add_argument("--start-maximized")
-    options.add_experimental_option("detach", True)
-
-    try:
-        driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
-        driver.get(url)
-
-        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
-        time.sleep(3)
-
-        # Clear editor using JavaScript
-        driver.execute_script("monaco.editor.getModels()[0].setValue('');")
-        time.sleep(1)
-
-        # Paste solution into editor
-        escaped_sol = json.dumps(sol)
-        driver.execute_script(f"monaco.editor.getModels()[0].setValue({escaped_sol});")
-        time.sleep(2)
-
-        # Focus editor
-        editor_element = driver.find_element(By.CLASS_NAME, "monaco-editor")
-        editor_element.click()
-        time.sleep(1)
-
-        # Confirm focus by sending dummy key
-        ActionChains(driver).send_keys(Keys.ARROW_RIGHT).perform()
-        time.sleep(1)
-
-        # Run code using Ctrl + `
-        actions = ActionChains(driver)
-        actions.key_down(Keys.CONTROL).send_keys("`").key_up(Keys.CONTROL).perform()
-        st.info("🚀 Sent Run command (Ctrl + `)")
-        time.sleep(5)
-
-        # Wait for Run result
-        try:
-            result_element = WebDriverWait(driver, 25).until(
-                EC.presence_of_element_located((
-                    By.XPATH,
-                    "//div[contains(text(),'Accepted') or contains(text(),'Wrong Answer') or contains(text(),'Runtime Error') or contains(text(),'Time Limit')]"
-                ))
-            )
-            result_text = result_element.text.strip()
-            st.info(f"🧪 Run Result: {result_text}")
-
-            if "Accepted" in result_text or "Success" in result_text:
-                st.success(f"✅ Problem {pid} test cases passed!")
-
-                # Submit via Ctrl + Enter
-                actions = ActionChains(driver)
-                actions.key_down(Keys.CONTROL).send_keys(Keys.ENTER).key_up(Keys.CONTROL).perform()
-                st.info("🚀 Sent Submit command (Ctrl + Enter)")
-                time.sleep(5)
-
-                # Confirm submission result
-                try:
-                    result_submit = WebDriverWait(driver, 20).until(
-                        EC.presence_of_element_located((
-                            By.XPATH,
-                            "//div[contains(text(),'Accepted') or contains(text(),'Success')]"
-                        ))
-                    )
-                    st.success(f"🏆 Problem {pid} submitted successfully!")
-                    st.session_state.solved_problems.add(pid)
-                except TimeoutException:
-                    st.warning("⚠ Submission confirmation timeout.")
-            else:
-                st.error(f"❌ Test cases failed: {result_text}")
-        except TimeoutException:
-            st.error("❌ Run result timed out.")
-    except WebDriverException as e:
-        st.error(f"❌ Selenium Error: {e}")
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
 
@@ -247,13 +166,12 @@ if user_input.lower().startswith("solve leetcode"):
         slug = get_slug(pid)
         if slug:
             lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
-            if st.button("Generate & Submit Solution"):
+            if st.button("Generate Solution"):
                 st.session_state.problem_history.append(pid)
                 open_problem(pid)
                 text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
-                submit_solution_and_paste(pid, lang, solution)
         else:
             st.error("❌ Invalid problem number.")
     else:
