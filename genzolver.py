@@ -9,18 +9,16 @@ import google.generativeai as genai
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.webdriver.common.action_chains import ActionChains
 
-# --- 🔐 Secure Gemini API Setup ---
-API_KEY = os.getenv("GEMINI_API_KEY")  # Set in environment variable
-if not API_KEY:
-    st.error("❌ Gemini API key not found! Set GEMINI_API_KEY in your environment.")
-    st.stop()
-
+# --- 🔐 Gemini API Setup ---
+API_KEY = "AIzaSyAuqflDWBKYP3edhkTH69qoTKJZ_BgbNW8"
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
@@ -90,6 +88,7 @@ Requirements:
 - Wrap the solution inside class Solution {{ public: ... }};
 - Follow the LeetCode function signature.
 - Return only the full class definition with the method inside.
+- Do NOT use code fences like  or {lang}.
 Solution:"""
     
     try:
@@ -97,64 +96,6 @@ Solution:"""
         return res.text.strip()
     except Exception as e:
         return f"❌ Gemini Error: {e}"
-
-# --- 🛠 Submit Solution via Selenium ---
-def submit_solution_and_paste(pid, lang, sol):
-    slug = get_slug(pid)
-    if not slug:
-        st.error("❌ Invalid problem number.")
-        return
-    url = f"https://leetcode.com/problems/{slug}/"
-
-    # Auto-detect Edge WebDriver
-    driver_path = "msedgedriver.exe"  # Assumes it's in PATH
-    
-    options = EdgeOptions()
-    options.use_chromium = True
-    options.add_argument("--start-maximized")
-    options.add_experimental_option("detach", True)
-    
-    try:
-        driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
-        driver.get(url)
-
-        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
-        time.sleep(3)
-
-        # Clear editor
-        driver.execute_script("monaco.editor.getModels()[0].setValue('');")
-        time.sleep(1)
-
-        # Paste solution
-        driver.execute_script(f"monaco.editor.getModels()[0].setValue({json.dumps(sol)});")
-        time.sleep(2)
-
-        # Click Run button instead of using keyboard shortcuts
-        try:
-            run_button = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Run')]"))
-            )
-            run_button.click()
-            st.info("🚀 Running solution...")
-            time.sleep(5)
-        except TimeoutException:
-            st.warning("⚠ Could not find Run button.")
-
-        # Check Run result
-        try:
-            result_element = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Accepted') or contains(text(),'Wrong Answer')]"))
-            )
-            result_text = result_element.text.strip()
-            st.info(f"🧪 Run Result: {result_text}")
-
-            if "Accepted" in result_text:
-                st.success(f"✅ Problem {pid} test cases passed!")
-                st.session_state.solved_problems.add(pid)
-        except TimeoutException:
-            st.error("❌ Run result timed out.")
-    except WebDriverException as e:
-        st.error(f"❌ Selenium Error: {e}")
 
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
@@ -165,11 +106,37 @@ if user_input.lower().startswith("solve leetcode"):
         pid = tokens[2]
         slug = get_slug(pid)
         if slug:
-            lang = st.selectbox("Language", ["cpp", "python", "java"], index=0)
-            if st.button("Generate & Submit Solution"):
+            lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
+            if st.button("Generate Solution"):
+                st.session_state.problem_history.append(pid)
+                open_problem(pid)
                 text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
-                submit_solution_and_paste(pid, lang, solution)
         else:
             st.error("❌ Invalid problem number.")
+    else:
+        st.error("❌ Use format: Solve LeetCode [problem number]")
+elif user_input:
+    try:
+        res = model.generate_content(user_input)
+        st.chat_message("assistant").write(res.text)
+    except Exception as e:
+        st.error(f"❌ Gemini Error: {e}")
+
+# --- 📊 Analytics Display ---
+if st.button("Show Analytics"):
+    st.write("### 📈 Problem Solving Analytics")
+    for pid, data in st.session_state.analytics.items():
+        st.write(f"Problem {pid}: Attempts: {data['attempts']}")
+        for sol in data["solutions"]:
+            st.code(sol, language="cpp")
+
+# --- 🕘 History & ✅ Solved Problems ---
+if st.session_state.problem_history:
+    st.write("### 🕘 Recent Problems:")
+    for pid in reversed(st.session_state.problem_history):
+        st.write(f"- Problem {pid}")
+if st.session_state.solved_problems:
+    st.write("### ✅ Solved:")
+    st.write(", ".join(sorted(st.session_state.solved_problems)))
