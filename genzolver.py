@@ -19,6 +19,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 import undetected_chromedriver as uc
+from packaging.version import Version as LooseVersion
+
 # --- 🔐 Gemini API Setup ---
 API_KEY = "AIzaSyAuqflDWBKYP3edhkTH69qoTKJZ_BgbNW8"
 genai.configure(api_key=API_KEY)
