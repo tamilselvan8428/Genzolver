@@ -82,24 +82,14 @@ def open_problem(pid):
     options.add_experimental_option("detach", True)
 
     try:
-        driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
+        # Use full path to Edge WebDriver
+        service = EdgeService(executable_path=driver_path)
+        driver = webdriver.Edge(service=service, options=options)
         driver.get(url)
-        return driver  # Return driver for later use
+        return driver
 
     except WebDriverException as e:
         st.error(f"❌ Edge could not open: {e}")
-
-        # Recovery Options
-        retry = st.button("🔄 Retry Opening Edge")
-        switch_to_chrome = st.button("🌍 Switch to Chrome")
-
-        if retry:
-            return open_problem(pid)  # Retry opening Edge
-
-        if switch_to_chrome:
-            st.session_state["use_chrome"] = True
-            return open_problem_chrome(pid)  # Switch to Chrome
-
     return None
 
 # --- 🌍 Alternative: Open in Chrome ---
