@@ -24,6 +24,32 @@ model = genai.GenerativeModel("gemini-1.5-pro-latest")
 st.title("🤖 LeetCode Auto-Solver & Analytics Chatbot (Gemini AI)")
 st.write("Type Solve LeetCode [problem number] or ask me anything!")
 
+# --- 📝 User Input ---
+user_input = st.text_input("Your command or question:")
+language = st.selectbox("Language", ["cpp", "python", "java"])
+
+if user_input.startswith("solve leetcode"):
+    try:
+        pid = user_input.split()[-1]  # Extract problem number
+        slug = problems_dict.get(pid)
+
+        if slug:
+            url = f"https://leetcode.com/problems/{slug}/"
+            st.write(f"🌍 [Open Problem]({url})")
+
+            # Fetch problem statement
+            problem_text = get_problem_statement(slug)
+            solution = solve_with_gemini(pid, language, problem_text)
+
+            # Display solution
+            st.code(solution, language)
+            st.button("🚀 Auto Submit", on_click=auto_run_submit, args=(pid, language, solution))
+        else:
+            st.error("❌ Invalid problem number.")
+    except Exception as e:
+        st.error(f"⚠️ Error: {e}")
+
+
 # --- 🗂 Cache LeetCode Problems ---
 @st.cache_data
 def fetch_problems():
