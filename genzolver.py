@@ -54,10 +54,22 @@ def open_problem(pid):
     slug = get_slug(pid)
     if slug:
         url = f"https://leetcode.com/problems/{slug}/"
-        webbrowser.open(url)
-        return url
-    st.error("❌ Invalid problem number.")
+        st.info(f"🌐 Opening {url} in Edge...")
+        options = EdgeOptions()
+        options.use_chromium = True
+        options.add_argument("--start-maximized")
+        options.add_experimental_option("detach", True)  # Keep Edge open
+
+        try:
+            driver = webdriver.Edge(service=EdgeService(driver_path), options=options)
+            driver.get(url)
+            return driver  # Return the driver to use later
+        except WebDriverException as e:
+            st.error(f"❌ Edge could not open: {e}")
+    else:
+        st.error("❌ Invalid problem number.")
     return None
+
 
 # --- 📝 Fetch Problem Statement ---
 def get_problem_statement(slug):
