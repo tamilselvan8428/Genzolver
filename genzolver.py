@@ -54,20 +54,13 @@ def get_slug(pid):
 # --- 🛠 WebDriver Setup ---
 # --- 🛠 WebDriver Setup ---
 def setup_webdriver():
-    if "webdriver_path" not in st.session_state:
-        st.session_state["webdriver_path"] = "C:\\WebDrivers\\msedgedriver.exe"
-
-    driver_path = st.session_state["webdriver_path"]
+    driver_path = "C:\\WebDrivers\\msedgedriver.exe"  # Manually set path
 
     if not os.path.exists(driver_path):
-        st.warning("❌ Edge WebDriver not found!")
-        new_path = st.text_input("Enter WebDriver Path:", driver_path)
-        if st.button("Save Path"):
-            st.session_state["webdriver_path"] = new_path
-            st.success("✅ WebDriver path updated!")
-            return new_path
+        st.error("❌ Edge WebDriver not found! Double-check the path.")
         return None
     return driver_path
+
 
 # --- 🌐 Open LeetCode Problem with Recovery ---
 def open_problem(pid):
