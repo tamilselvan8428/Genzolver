@@ -53,40 +53,12 @@ def get_slug(pid):
 
 # --- 🛠 WebDriver Setup ---
 def setup_webdriver():
-    driver_folder = "C:\\WebDrivers"
-    driver_path = os.path.join(driver_folder, "msedgedriver.exe")
-
-    # If driver exists, return the path
+    driver_path = "C:\\WebDrivers\\msedgedriver.exe"
     if os.path.exists(driver_path):
         return driver_path
+    st.error("❌ Edge WebDriver not found! Please install it manually.")
+    return None
 
-    st.info("🔄 Downloading Edge WebDriver...")
-
-    # Get latest Edge version
-    try:
-        edge_version_url = "https://edgeupdates.microsoft.com/api/products?view=enterprise"
-        edge_versions = requests.get(edge_version_url).json()
-        latest_version = edge_versions[0]["versions"][0]["version"]
-        driver_url = f"https://msedgedriver.azureedge.net/{latest_version}/edgedriver_win64.zip"
-
-        # Download WebDriver
-        response = requests.get(driver_url, stream=True)
-        zip_path = os.path.join(driver_folder, "edgedriver.zip")
-
-        with open(zip_path, "wb") as f:
-            f.write(response.content)
-
-        # Extract WebDriver
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(driver_folder)
-
-        os.remove(zip_path)  # Clean up
-        st.success("✅ Edge WebDriver Installed!")
-
-    except Exception as e:
-        st.error(f"❌ WebDriver download failed: {e}")
-
-    return driver_path
 
 # --- 🌐 Open LeetCode Problem ---
 def open_problem(pid):
