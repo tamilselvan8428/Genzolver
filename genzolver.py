@@ -118,10 +118,11 @@ Solution:"""
         return f"❌ Gemini Error: {e}"
 
 # --- 🚀 Selenium WebDriver Setup ---
-def setup_driver():
+def setup_driver(webdriver_path):
     options = webdriver.EdgeOptions()
     options.add_experimental_option("detach", True)
-    driver = webdriver.Edge(options=options)
+    service = webdriver.EdgeService(executable_path=webdriver_path)
+    driver = webdriver.Edge(service=service, options=options)
     return driver
 
 # --- 🖱️ Automate Code Execution ---
@@ -140,6 +141,7 @@ def automate_submission(driver, solution):
 
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
+webdriver_path = st.text_input("Enter WebDriver Path:")
 
 driver = None
 if user_input.lower().startswith("solve leetcode"):
@@ -156,10 +158,13 @@ if user_input.lower().startswith("solve leetcode"):
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
                 
-                driver = setup_driver()
-                driver.get(url)
-                time.sleep(5)
-                automate_submission(driver, solution)
+                if webdriver_path:
+                    driver = setup_driver(webdriver_path)
+                    driver.get(url)
+                    time.sleep(5)
+                    automate_submission(driver, solution)
+                else:
+                    st.error("❌ Please enter a valid WebDriver path.")
         else:
             st.error("❌ Invalid problem number or problem not found.")
     else:
