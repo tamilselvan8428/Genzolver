@@ -99,9 +99,6 @@ Solution:"""
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
-# --- 🚀 Submit Solution to LeetCode via Chrome ---
-import undetected_chromedriver as uc
-
 def submit_solution(pid, lang, solution):
     try:
         slug = problems_dict.get(pid)
@@ -119,8 +116,7 @@ def submit_solution(pid, lang, solution):
         options.binary_location = "/usr/bin/google-chrome"  # Ensure correct Chrome path
 
         # ✅ Use Undetected Chromedriver
-        driver = uc.Chrome(options=options)
-
+        driver = webdriver.Chrome(options=options)
         driver.get(url)
         time.sleep(5)  # Wait for page load
 
