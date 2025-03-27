@@ -12,8 +12,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.edge.service import Service as EdgeService
-from selenium.webdriver.edge.options import Options as EdgeOptions
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
 
@@ -88,7 +88,7 @@ Requirements:
 - Wrap the solution inside class Solution {{ public: ... }};
 - Follow the LeetCode function signature.
 - Return only the full class definition with the method inside.
-- Do NOT use code fences like  or {lang}.
+- Do NOT use code fences like ``` or {lang}.
 Solution:"""
     
     try:
@@ -96,6 +96,56 @@ Solution:"""
         return res.text.strip()
     except Exception as e:
         return f"❌ Gemini Error: {e}"
+
+# --- 🚀 Submit Solution to LeetCode via Chrome ---
+def submit_solution(pid, lang, solution):
+    slug = get_slug(pid)
+    if not slug:
+        st.error("❌ Invalid problem number.")
+        return
+    url = f"https://leetcode.com/problems/{slug}/"
+
+    # Chrome WebDriver Setup
+    options = ChromeOptions()
+    options.add_argument("--start-maximized")
+    options.add_argument("--disable-popup-blocking")
+    options.add_experimental_option("detach", True)
+
+    driver = webdriver.Chrome(service=ChromeService(), options=options)
+    driver.get(url)
+
+    try:
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "monaco-editor")))
+        time.sleep(3)
+        
+        # Clear editor and paste solution
+        driver.execute_script("monaco.editor.getModels()[0].setValue('');")
+        time.sleep(1)
+        driver.execute_script(f"monaco.editor.getModels()[0].setValue({json.dumps(solution)});")
+        time.sleep(2)
+
+        # Focus editor
+        editor_element = driver.find_element(By.CLASS_NAME, "monaco-editor")
+        editor_element.click()
+        time.sleep(1)
+        
+        # Run Code (Ctrl + `)
+        actions = ActionChains(driver)
+        actions.key_down(Keys.CONTROL).send_keys("`").key_up(Keys.CONTROL).perform()
+        st.info("🚀 Running Code...")
+        time.sleep(5)
+
+        # Submit Code (Ctrl + Enter)
+        actions.key_down(Keys.CONTROL).send_keys(Keys.ENTER).key_up(Keys.CONTROL).perform()
+        st.info("🚀 Submitting Code...")
+        time.sleep(5)
+        
+        st.success(f"🏆 Problem {pid} submitted successfully!")
+        st.session_state.solved_problems.add(pid)
+    except WebDriverException as e:
+        st.error(f"❌ Selenium Error: {e}")
+    finally:
+        driver.quit()
 
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
@@ -107,36 +157,14 @@ if user_input.lower().startswith("solve leetcode"):
         slug = get_slug(pid)
         if slug:
             lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
-            if st.button("Generate Solution"):
+            if st.button("Generate & Submit Solution"):
                 st.session_state.problem_history.append(pid)
                 open_problem(pid)
                 text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
+                submit_solution(pid, lang, solution)
         else:
             st.error("❌ Invalid problem number.")
     else:
         st.error("❌ Use format: Solve LeetCode [problem number]")
-elif user_input:
-    try:
-        res = model.generate_content(user_input)
-        st.chat_message("assistant").write(res.text)
-    except Exception as e:
-        st.error(f"❌ Gemini Error: {e}")
-
-# --- 📊 Analytics Display ---
-if st.button("Show Analytics"):
-    st.write("### 📈 Problem Solving Analytics")
-    for pid, data in st.session_state.analytics.items():
-        st.write(f"Problem {pid}: Attempts: {data['attempts']}")
-        for sol in data["solutions"]:
-            st.code(sol, language="cpp")
-
-# --- 🕘 History & ✅ Solved Problems ---
-if st.session_state.problem_history:
-    st.write("### 🕘 Recent Problems:")
-    for pid in reversed(st.session_state.problem_history):
-        st.write(f"- Problem {pid}")
-if st.session_state.solved_problems:
-    st.write("### ✅ Solved:")
-    st.write(", ".join(sorted(st.session_state.solved_problems)))
