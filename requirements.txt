@@ -1,6 +1,7 @@
 streamlit
-requests
-beautifulsoup4
-pyautogui
-pyperclip
+selenium
+webdriver-manager
 google-generativeai
+beautifulsoup4
+pyperclip
+requests
