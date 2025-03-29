@@ -4,27 +4,8 @@ import requests
 import streamlit as st
 import google.generativeai as genai
 import pyperclip
+import pyautogui
 from bs4 import BeautifulSoup
-
-# Selenium Imports
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from webdriver_manager.chrome import ChromeDriverManager
-
-# --- 🔧 Setup ChromeDriver (No Root Required) ---
-def get_webdriver():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # Headless mode
-    options.add_argument("--no-sandbox")  # Bypass sandbox
-    options.add_argument("--disable-dev-shm-usage")  # Fix memory issues
-    options.add_argument("--disable-gpu")  # Disable GPU
-    options.add_argument("--window-size=1920,1080")  # Fullscreen mode
-
-    # Use WebDriver Manager (No manual ChromeDriver install needed)
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    return driver
 
 # --- 🔐 API Key Setup ---
 API_KEY = os.getenv("GEMINI_API_KEY")  # Load API Key from Environment Variable
@@ -96,73 +77,44 @@ Solution:"""
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
-# --- 🚀 Automate LeetCode Execution ---
+# --- 🚀 Automate LeetCode Execution using Shortcut Keys ---
 def automate_submission(pid, lang, solution):
-    """Automate opening, pasting, running, and submitting the solution"""
-    try:
-        slug = get_slug(pid)
-        if not slug:
-            st.error("❌ Invalid problem number.")
-            return
-        
-        url = f"https://leetcode.com/problems/{slug}/"
-        st.info(f"🌍 Opening {url}...")
+    """Automates opening a LeetCode problem, pasting a solution, running, and submitting it."""
+    slug = get_slug(pid)
+    if not slug:
+        st.error("❌ Invalid problem number.")
+        return
 
-        driver = get_webdriver()
-        driver.get(url)
-        time.sleep(5)  # Wait for page load
+    url = f"https://leetcode.com/problems/{slug}/"
+    st.info(f"🌍 Opening {url}...")
 
-        # Click the "Sign In" button (if needed)
-        try:
-            sign_in_button = driver.find_element(By.XPATH, "//a[text()='Sign in']")
-            sign_in_button.click()
-            st.info("🔑 Please log in manually (waiting 15 sec)...")
-            time.sleep(15)  # Wait for user login
-        except:
-            st.info("✅ Already logged in!")
+    # Step 1: Open new tab and load LeetCode problem
+    pyautogui.hotkey('ctrl', 't')  # Open new tab
+    time.sleep(1)
+    pyperclip.copy(url)  # Copy URL to clipboard
+    pyautogui.hotkey('ctrl', 'v')  # Paste into search bar
+    pyautogui.press('enter')  # Open the page
+    time.sleep(5)  # Wait for the page to load
 
-        # Click "Editor" tab
-        try:
-            driver.find_element(By.XPATH, "//span[contains(text(),'Editor')]").click()
-            time.sleep(2)
-        except:
-            st.warning("⚠ Couldn't find Editor tab, trying default.")
+    # Step 2: Wait for user to log in manually if needed
+    time.sleep(3)
 
-        # Select Language
-        try:
-            lang_dropdown = driver.find_element(By.XPATH, "//div[@role='combobox']")
-            lang_dropdown.click()
-            time.sleep(1)
-            lang_option = driver.find_element(By.XPATH, f"//div[text()='{lang.capitalize()}']")
-            lang_option.click()
-            time.sleep(2)
-        except:
-            st.warning("⚠ Couldn't change language!")
+    # Step 3: Paste the solution into the editor
+    pyperclip.copy(solution)  # Copy solution
+    pyautogui.hotkey('ctrl', 'a')  # Select all text
+    pyautogui.hotkey('ctrl', 'v')  # Paste solution
 
-        # Paste solution
-        st.info("⌨ Pasting solution...")
-        pyperclip.copy(solution)
-        editor = driver.find_element(By.CLASS_NAME, "CodeMirror")
-        editor.click()
-        editor.send_keys(Keys.CONTROL, "a")  # Select all
-        editor.send_keys(Keys.CONTROL, "v")  # Paste
+    # Step 4: Run the code using Ctrl + '
+    st.info("🚀 Running solution...")
+    pyautogui.hotkey('ctrl', "'")
+    time.sleep(10)
 
-        # Run the code
-        st.info("🚀 Running solution...")
-        run_button = driver.find_element(By.XPATH, "//button/span[contains(text(),'Run')]")
-        run_button.click()
-        time.sleep(10)
+    # Step 5: Submit the code using Ctrl + Enter
+    st.info("🏆 Submitting solution...")
+    pyautogui.hotkey('ctrl', 'enter')
+    time.sleep(15)
 
-        # Submit the code
-        st.info("🏆 Submitting solution...")
-        submit_button = driver.find_element(By.XPATH, "//button/span[contains(text(),'Submit')]")
-        submit_button.click()
-        time.sleep(15)
-
-        st.success("✅ Solution submitted successfully!")
-        driver.quit()
-    except Exception as e:
-        st.error(f"❌ Selenium Error: {e}")
+    st.success("✅ Solution submitted successfully!")
 
 # --- 🎯 User Input Handling ---
 user_input = st.text_input("Your command or question:")
