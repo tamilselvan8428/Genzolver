@@ -12,17 +12,22 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
-os.system("apt-get update")
-os.system("apt-get install -y wget unzip")
-os.system("wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb")
-os.system("dpkg -i google-chrome-stable_current_amd64.deb || true")
-os.system("apt-get install -f -y")
 
-# Install ChromeDriver
-os.system("wget https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip")
-os.system("unzip chromedriver_linux64.zip")
-os.system("mv chromedriver /usr/bin/chromedriver")
-os.system("chmod +x /usr/bin/chromedriver")
+# --- 🔧 Install & Configure ChromeDriver ---
+def setup_chromedriver():
+    os.system("apt-get update")
+    os.system("apt-get install -y wget unzip")
+    os.system("wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb")
+    os.system("dpkg -i google-chrome-stable_current_amd64.deb || true")
+    os.system("apt-get install -f -y")
+
+    # Install ChromeDriver (Ensure it matches Chrome version)
+    os.system("wget https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip")
+    os.system("unzip chromedriver_linux64.zip")
+    os.system("mv chromedriver /usr/bin/chromedriver")
+    os.system("chmod +x /usr/bin/chromedriver")
+
+setup_chromedriver()
 
 # --- 🔐 API Key Setup ---
 API_KEY = os.getenv("GEMINI_API_KEY")  # Load API Key from Environment Variable
@@ -106,29 +111,25 @@ def automate_submission(pid, lang, solution):
         
         url = f"https://leetcode.com/problems/{slug}/"
         st.info(f"🌍 Opening {url}...")
-        
-        # Setup Selenium WebDriver
+
+        # Setup Selenium WebDriver with Chrome Options
         options = webdriver.ChromeOptions()
         options.add_argument("--headless")  # Run in headless mode
         options.add_argument("--no-sandbox")  # Bypass OS-level sandbox
-        options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
-        options.add_argument("--disable-gpu")  # Disable GPU usage
-        options.add_argument("--window-size=1920,1080")  # Set window size
+        options.add_argument("--disable-dev-shm-usage")  # Fix resource limits
+        options.add_argument("--disable-gpu")  # Disable GPU
+        options.add_argument("--window-size=1920,1080")  # Fullscreen
 
-# Install the driver and launch browser
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
         driver.get(url)
-
-        # Wait for the page to load
-        time.sleep(5)
+        time.sleep(5)  # Wait for page load
 
         # Click the "Sign In" button (if needed)
         try:
             sign_in_button = driver.find_element(By.XPATH, "//a[text()='Sign in']")
             sign_in_button.click()
             st.info("🔑 Please log in manually (waiting 15 sec)...")
-            time.sleep(15)  # Wait for user to log in
+            time.sleep(15)  # Wait for user login
         except:
             st.info("✅ Already logged in!")
 
@@ -162,17 +163,15 @@ def automate_submission(pid, lang, solution):
         st.info("🚀 Running solution...")
         run_button = driver.find_element(By.XPATH, "//button/span[contains(text(),'Run')]")
         run_button.click()
-        time.sleep(10)  # Wait for execution
+        time.sleep(10)
 
         # Submit the code
         st.info("🏆 Submitting solution...")
         submit_button = driver.find_element(By.XPATH, "//button/span[contains(text(),'Submit')]")
         submit_button.click()
-        time.sleep(15)  # Wait for submission
+        time.sleep(15)
 
         st.success("✅ Solution submitted successfully!")
-
-        # Close the browser
         driver.quit()
     except Exception as e:
         st.error(f"❌ Selenium Error: {e}")
