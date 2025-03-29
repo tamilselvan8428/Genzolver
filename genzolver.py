@@ -5,14 +5,14 @@ import streamlit as st
 import google.generativeai as genai
 import pyperclip
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.edge.service import Service
+from selenium.webdriver.edge.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from bs4 import BeautifulSoup
 
-# ✅ Setup Headless Browser for Cloud Deployment
-CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
-GOOGLE_CHROME_PATH = "/usr/bin/google-chrome-stable"
+# ✅ Setup Edge WebDriver Path
+EDGE_DRIVER_PATH = os.getenv("EDGE_DRIVER_PATH", "msedgedriver.exe")
 
 # ✅ Set API Key for Gemini AI
 API_KEY = os.getenv("GEMINI_API_KEY")
@@ -94,17 +94,15 @@ def automate_submission(pid, lang, solution):
     url = f"https://leetcode.com/problems/{slug}/"
     st.info(f"🌍 Opening {url}...")
 
-    # ✅ Setup Chrome options for headless mode
-    options = webdriver.ChromeOptions()
+    # ✅ Setup Edge options
+    options = Options()
     options.add_argument("--headless")  # Run without UI
-    options.add_argument("--no-sandbox")  # Required for cloud servers
     options.add_argument("--disable-gpu")
-    options.add_argument("--disable-dev-shm-usage")
-    options.binary_location = GOOGLE_CHROME_PATH  # Ensure correct binary
+    options.add_argument("--no-sandbox")
 
     # ✅ Initialize WebDriver
-    service = Service(CHROMEDRIVER_PATH)
-    driver = webdriver.Chrome(service=service, options=options)
+    service = Service(EDGE_DRIVER_PATH)
+    driver = webdriver.Edge(service=service, options=options)
     driver.get(url)
     time.sleep(5)
 
@@ -157,6 +155,7 @@ if user_input.lower().startswith("solve leetcode"):
             st.error("❌ Invalid problem number.")
     else:
         st.error("❌ Use format: Solve LeetCode [problem number]")
+
 elif user_input:
     try:
         res = model.generate_content(user_input)
