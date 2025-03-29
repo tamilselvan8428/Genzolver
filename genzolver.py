@@ -1,26 +1,20 @@
-import os
 import streamlit as st
 import webbrowser
 import requests
 import time
+import pyautogui
+import pyperclip
 import google.generativeai as genai
 from bs4 import BeautifulSoup
 
 # --- 🔐 Gemini API Setup ---
-API_KEY = st.secrets["GEMINI_API_KEY"]
+API_KEY ="AIzaSyDJcR1N1QoNrmNTIPl492ZsHhos2sWW-Vs"
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
-# --- 🚀 Cloud/Local Environment Check ---
-is_cloud = os.environ.get("DISPLAY") is None  # Cloud servers don’t have a GUI
-
-if not is_cloud:
-    import pyautogui
-    import pyperclip
-
 # --- 🌐 Streamlit UI Setup ---
-st.title("🤖 LeetCode Auto-Solver & Auto-Submit")
-st.write("Type 'Solve LeetCode [problem number]' to start!")
+st.title("🤖 LeetCode Auto-Solver & Analytics Chatbot")
+st.write("Type 'Solve LeetCode [problem number]' or ask me anything!")
 
 # --- 🗂 Cache LeetCode Problems ---
 @st.cache_data
@@ -41,17 +35,22 @@ def get_slug(pid):
     return problems_dict.get(pid)
 
 def open_problem(pid):
-    """Open the LeetCode problem if not already open."""
+    """Open the LeetCode problem only if it's not already open."""
     slug = get_slug(pid)
     if slug:
         url = f"https://leetcode.com/problems/{slug}/"
-        webbrowser.open(url, new=2)
+
+        # Use `webbrowser.open_new_tab` only if this problem isn't open yet
+        if "leetcode.com/problems" not in webbrowser.get().name:
+            webbrowser.open(url, new=2)  # Open in a new tab only once
+        time.sleep(7)
         return url
+    st.error("❌ Invalid problem number.")
     return None
 
 # --- 📝 Fetch Problem Statement ---
 def get_problem_statement(slug):
-    """Fetch problem statement using LeetCode GraphQL API."""
+    """Fetch the problem statement from LeetCode using GraphQL API."""
     try:
         query = {
             "query": """
@@ -78,8 +77,9 @@ def solve_with_gemini(pid, lang, text):
 Problem:  
 {text}
 Requirements:
+- Wrap the solution inside class Solution {{ public: ... }}.
 - Follow the LeetCode function signature.
-- Return only the function/class definition.
+- Return only the full class definition with the method inside.
 - Do NOT use code fences.
 Solution:"""
     
@@ -89,53 +89,74 @@ Solution:"""
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
-# --- 🛠 Automate Pasting, Running & Submitting ---
-def auto_paste_and_submit():
-    """Automates clicking, pasting, running, and submitting."""
-    time.sleep(5)  # Wait for page load
+# --- 🔍 Page Verification ---
+def ensure_leetcode_page(pid):
+    """Ensure the correct LeetCode problem page is open."""
+    open_problem(pid)
+
+def focus_on_editor():
+    """Click inside the script editor and paste solution."""
+    time.sleep(3)
+
+    # Move mouse to LeetCode editor's area and click (adjust coordinates)
+    pyautogui.click(x=1500, y=400)  # Adjust based on screen resolution
     
-    # Click inside the code editor (adjust coordinates as needed)
-    pyautogui.click(x=1500, y=400)
     time.sleep(1)
 
-    # Paste solution
-    pyautogui.hotkey('ctrl', 'a')  # Select all
-    pyautogui.hotkey('ctrl', 'v')  # Paste
+    # Select all and paste new solution
+    pyautogui.hotkey('ctrl', 'a')  
+    pyautogui.hotkey('ctrl', 'v')  
     time.sleep(1)
 
-    # Run solution
-    pyautogui.hotkey('ctrl', '`')
-    time.sleep(8)
+# --- 🛠 Submit Solution ---    
+def submit_solution(pid, lang, sol):
+    """Automate the process of pasting and submitting solution on LeetCode."""
+    try:
+        st.info("🔍 Opening LeetCode page (only if needed)...")
+        ensure_leetcode_page(pid)
 
-    # Check if run was successful (mock function)
-    if is_run_successful():
-        st.success("✅ Code executed successfully! Now submitting...")
+        # Copy solution to clipboard
+        pyperclip.copy(sol)
 
-        # Submit solution
-        pyautogui.hotkey('ctrl', 'enter')
-        time.sleep(10)
+        st.info("⌨ Clicking on editor and pasting solution...")
+        focus_on_editor()
 
-        if is_submission_successful():
-            st.success("🏆 Problem submitted successfully!")
+        # Run the solution
+        pyautogui.hotkey('ctrl', '`')
+        st.info("🚀 Running code...")
+        time.sleep(8)
+
+        if is_run_successful():
+            st.success("✅ Code executed successfully! Now submitting...")
+
+            # Submit the solution
+            pyautogui.hotkey('ctrl', 'enter')
+            st.info("🏆 Submitting solution...")
+            time.sleep(10)
+
+            if is_submission_successful():
+                st.success(f"✅ Problem {pid} submitted successfully!")
+            else:
+                st.error("❌ Submission failed. Retrying...")
+                submit_solution(pid, lang, sol)  # Retry if needed
         else:
-            st.error("❌ Submission failed. Retrying...")
-            auto_paste_and_submit()  # Retry
-    else:
-        st.error("❌ Run failed. Check the solution or retry.")
+            st.error("❌ Run failed. Check the solution or retry.")
+    except Exception as e:
+        st.error(f"❌ PyAutoGUI Error: {e}")
 
 # --- ✅ Verification Helpers ---
 def is_run_successful():
-    """Mock function to check if run was successful."""
+    """Check if code execution was successful."""
     time.sleep(5)
-    return True  # Replace with image detection if needed
+    return True  # Mock function; replace with image detection if needed
 
 def is_submission_successful():
-    """Mock function to check if submission was successful."""
+    """Check if submission was successful."""
     time.sleep(5)
-    return True  # Replace with image detection if needed
+    return True  # Mock function; replace with image detection if needed
 
 # --- 🎯 User Input Handling ---
-user_input = st.text_input("Your command:")
+user_input = st.text_input("Your command or question:")
 
 if user_input.lower().startswith("solve leetcode"):
     tokens = user_input.strip().split()
@@ -144,22 +165,12 @@ if user_input.lower().startswith("solve leetcode"):
         slug = get_slug(pid)
         if slug:
             lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
-            
-            if st.button("Generate Solution"):
+            if st.button("Generate & Submit Solution"):
+                open_problem(pid)
                 text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
-                
-                if is_cloud:
-                    if st.button("Copy solution to clipboard"):
-                        pyperclip.copy(solution)
-                        st.success("✅ Solution copied! Now paste it manually in LeetCode.")
-                else:
-                    st.info("🔍 Opening LeetCode page...")
-                    open_problem(pid)
-                    time.sleep(5)
-                    pyperclip.copy(solution)
-                    auto_paste_and_submit()
+                submit_solution(pid, lang, solution)
         else:
             st.error("❌ Invalid problem number.")
     else:
