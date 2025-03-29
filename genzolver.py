@@ -1,9 +1,8 @@
+import os
 import streamlit as st
 import webbrowser
 import requests
 import time
-import pyautogui
-import pyperclip
 import google.generativeai as genai
 from bs4 import BeautifulSoup
 
@@ -11,6 +10,13 @@ from bs4 import BeautifulSoup
 API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
+
+# --- 🚀 Cloud/Local Environment Check ---
+is_cloud = os.environ.get("DISPLAY") is None  # Cloud servers don’t have a GUI
+
+if not is_cloud:
+    import pyautogui
+    import pyperclip
 
 # --- 🌐 Streamlit UI Setup ---
 st.title("🤖 LeetCode Auto-Solver & Analytics Chatbot")
@@ -39,10 +45,7 @@ def open_problem(pid):
     slug = get_slug(pid)
     if slug:
         url = f"https://leetcode.com/problems/{slug}/"
-
-        # Use `webbrowser.open_new_tab` only if this problem isn't open yet
-        if "leetcode.com/problems" not in webbrowser.get().name:
-            webbrowser.open(url, new=2)  # Open in a new tab only once
+        webbrowser.open(url, new=2)  # Open in a new tab
         time.sleep(7)
         return url
     st.error("❌ Invalid problem number.")
@@ -94,23 +97,26 @@ def ensure_leetcode_page(pid):
     """Ensure the correct LeetCode problem page is open."""
     open_problem(pid)
 
+# --- 🛠 Solution Submission (Only for Local Mode) ---
 def focus_on_editor():
-    """Click inside the script editor and paste solution."""
-    time.sleep(3)
-
-    # Move mouse to LeetCode editor's area and click (adjust coordinates)
-    pyautogui.click(x=1500, y=400)  # Adjust based on screen resolution
+    """Click inside the script editor and paste solution (only for local execution)."""
+    if is_cloud:
+        st.warning("⚠ Auto pasting is disabled in cloud mode. Please paste manually.")
+        return
     
+    time.sleep(3)
+    pyautogui.click(x=1500, y=400)  # Adjust based on screen resolution
     time.sleep(1)
-
-    # Select all and paste new solution
     pyautogui.hotkey('ctrl', 'a')  
     pyautogui.hotkey('ctrl', 'v')  
     time.sleep(1)
 
-# --- 🛠 Submit Solution ---    
 def submit_solution(pid, lang, sol):
-    """Automate the process of pasting and submitting solution on LeetCode."""
+    """Automate the process of pasting and submitting solution on LeetCode (only locally)."""
+    if is_cloud:
+        st.warning("⚠ Auto submission is disabled in cloud mode. Please submit manually.")
+        return
+    
     try:
         st.info("🔍 Opening LeetCode page (only if needed)...")
         ensure_leetcode_page(pid)
@@ -165,12 +171,22 @@ if user_input.lower().startswith("solve leetcode"):
         slug = get_slug(pid)
         if slug:
             lang = st.selectbox("Language", ["cpp", "python", "java", "javascript", "csharp"], index=0)
-            if st.button("Generate & Submit Solution"):
-                open_problem(pid)
+            
+            if st.button("Generate Solution"):
                 text = get_problem_statement(slug)
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
-                submit_solution(pid, lang, solution)
+                
+                # Cloud mode: Allow manual copying
+                if is_cloud:
+                    if st.button("Copy solution to clipboard"):
+                        import pyperclip
+                        pyperclip.copy(solution)
+                        st.success("✅ Solution copied! Now paste it manually in LeetCode.")
+                
+                # Local mode: Auto-submit
+                else:
+                    submit_solution(pid, lang, solution)
         else:
             st.error("❌ Invalid problem number.")
     else:
