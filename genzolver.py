@@ -1,10 +1,10 @@
-import streamlit as st
-import requests
-import time
-import google.generativeai as genai
-from bs4 import BeautifulSoup
 import os
+import time
+import requests
+import streamlit as st
+import google.generativeai as genai
 import pyperclip
+from bs4 import BeautifulSoup
 
 # Selenium Imports
 from selenium import webdriver
@@ -13,21 +13,18 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
 
-# --- 🔧 Install & Configure ChromeDriver ---
-def setup_chromedriver():
-    os.system("apt-get update")
-    os.system("apt-get install -y wget unzip")
-    os.system("wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb")
-    os.system("dpkg -i google-chrome-stable_current_amd64.deb || true")
-    os.system("apt-get install -f -y")
+# --- 🔧 Setup ChromeDriver (No Root Required) ---
+def get_webdriver():
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # Headless mode
+    options.add_argument("--no-sandbox")  # Bypass sandbox
+    options.add_argument("--disable-dev-shm-usage")  # Fix memory issues
+    options.add_argument("--disable-gpu")  # Disable GPU
+    options.add_argument("--window-size=1920,1080")  # Fullscreen mode
 
-    # Install ChromeDriver (Ensure it matches Chrome version)
-    os.system("wget https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip")
-    os.system("unzip chromedriver_linux64.zip")
-    os.system("mv chromedriver /usr/bin/chromedriver")
-    os.system("chmod +x /usr/bin/chromedriver")
-
-setup_chromedriver()
+    # Use WebDriver Manager (No manual ChromeDriver install needed)
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    return driver
 
 # --- 🔐 API Key Setup ---
 API_KEY = os.getenv("GEMINI_API_KEY")  # Load API Key from Environment Variable
@@ -38,14 +35,13 @@ if not API_KEY:
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
-# --- 🌐 Streamlit UI Setup ---
+# --- 🌐 Streamlit UI ---
 st.title("🤖 LeetCode Auto-Solver & Submission Bot")
-st.write("Type 'Solve LeetCode [problem number]' or ask me anything!")
+st.write("Type 'Solve LeetCode [problem number]' to get a solution!")
 
-# --- 🗂 Cache LeetCode Problems ---
 @st.cache_data
 def fetch_problems():
-    """Fetch all LeetCode problems"""
+    """Fetch all LeetCode problems."""
     try:
         res = requests.get("https://leetcode.com/api/problems/all/")
         if res.status_code == 200:
@@ -112,15 +108,7 @@ def automate_submission(pid, lang, solution):
         url = f"https://leetcode.com/problems/{slug}/"
         st.info(f"🌍 Opening {url}...")
 
-        # Setup Selenium WebDriver with Chrome Options
-        options = webdriver.ChromeOptions()
-        options.add_argument("--headless")  # Run in headless mode
-        options.add_argument("--no-sandbox")  # Bypass OS-level sandbox
-        options.add_argument("--disable-dev-shm-usage")  # Fix resource limits
-        options.add_argument("--disable-gpu")  # Disable GPU
-        options.add_argument("--window-size=1920,1080")  # Fullscreen
-
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        driver = get_webdriver()
         driver.get(url)
         time.sleep(5)  # Wait for page load
 
