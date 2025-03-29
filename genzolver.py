@@ -45,7 +45,7 @@ def open_problem(pid):
     slug = get_slug(pid)
     if slug:
         url = f"https://leetcode.com/problems/{slug}/"
-        webbrowser.open(url, new=2)  # Open in a new tab
+        webbrowser.open(url, new=2)
         return url
     return None
 
@@ -150,22 +150,15 @@ if user_input.lower().startswith("solve leetcode"):
                 solution = solve_with_gemini(pid, lang, text)
                 st.code(solution, language=lang)
                 
-                # Cloud mode: Allow manual copying
                 if is_cloud:
                     if st.button("Copy solution to clipboard"):
-                        import pyperclip
                         pyperclip.copy(solution)
                         st.success("✅ Solution copied! Now paste it manually in LeetCode.")
                 else:
-                    # Local mode: Auto-Open LeetCode and submit
                     st.info("🔍 Opening LeetCode page...")
                     open_problem(pid)
-                    time.sleep(5)  # Wait for page load
-
-                    # Copy solution to clipboard
+                    time.sleep(5)
                     pyperclip.copy(solution)
-
-                    # Automate pasting and submitting
                     auto_paste_and_submit()
         else:
             st.error("❌ Invalid problem number.")
