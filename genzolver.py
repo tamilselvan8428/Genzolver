@@ -8,7 +8,7 @@ import google.generativeai as genai
 from bs4 import BeautifulSoup
 
 # --- 🔐 Gemini API Setup ---
-API_KEY = "AIzaSyDJcR1N1QoNrmNTIPl492ZsHhos2sWW-Vs"
+API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
@@ -35,12 +35,15 @@ def get_slug(pid):
     return problems_dict.get(pid)
 
 def open_problem(pid):
-    """Open the LeetCode problem in the browser."""
+    """Open the LeetCode problem only if it's not already open."""
     slug = get_slug(pid)
     if slug:
         url = f"https://leetcode.com/problems/{slug}/"
-        webbrowser.open(url)
-        time.sleep(7)  # Wait for page to load
+
+        # Use `webbrowser.open_new_tab` only if this problem isn't open yet
+        if "leetcode.com/problems" not in webbrowser.get().name:
+            webbrowser.open(url, new=2)  # Open in a new tab only once
+        time.sleep(7)
         return url
     st.error("❌ Invalid problem number.")
     return None
@@ -92,36 +95,31 @@ def ensure_leetcode_page(pid):
     open_problem(pid)
 
 def focus_on_editor():
-    """Ensure the editor is selected and paste the solution directly."""
+    """Click inside the script editor and paste solution."""
     time.sleep(3)
 
-    # Move mouse to LeetCode editor's area and click (adjust coordinates as needed)
-    pyautogui.click(x=800, y=500)  # Update these coordinates based on your screen resolution
+    # Move mouse to LeetCode editor's area and click (adjust coordinates)
+    pyautogui.click(x=1500, y=400)  # Adjust based on screen resolution
     
     time.sleep(1)
 
-    # Ensure paste action happens in the LeetCode editor
-    pyautogui.hotkey('ctrl', 'a')  # Select all existing code
-    pyautogui.hotkey('ctrl', 'v')  # Paste new code
+    # Select all and paste new solution
+    pyautogui.hotkey('ctrl', 'a')  
+    pyautogui.hotkey('ctrl', 'v')  
     time.sleep(1)
 
 # --- 🛠 Submit Solution ---    
 def submit_solution(pid, lang, sol):
-    """Automate the process of opening LeetCode, pasting solution, running, and submitting."""
+    """Automate the process of pasting and submitting solution on LeetCode."""
     try:
-        st.info("🔍 Opening LeetCode page...")
+        st.info("🔍 Opening LeetCode page (only if needed)...")
         ensure_leetcode_page(pid)
 
-        st.info("🚀 Switching to LeetCode browser window...")
-        time.sleep(3)
-        pyautogui.hotkey('alt', 'tab')  # Switch to browser
-        time.sleep(3)
-
-        # Copy solution to clipboard before pasting
+        # Copy solution to clipboard
         pyperclip.copy(sol)
 
-        st.info("⌨ Moving to editor and pasting solution...")
-        focus_on_editor()  # Click into editor and paste
+        st.info("⌨ Clicking on editor and pasting solution...")
+        focus_on_editor()
 
         # Run the solution
         pyautogui.hotkey('ctrl', '`')
