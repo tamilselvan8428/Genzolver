@@ -12,6 +12,17 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
+os.system("apt-get update")
+os.system("apt-get install -y wget unzip")
+os.system("wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb")
+os.system("dpkg -i google-chrome-stable_current_amd64.deb || true")
+os.system("apt-get install -f -y")
+
+# Install ChromeDriver
+os.system("wget https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip")
+os.system("unzip chromedriver_linux64.zip")
+os.system("mv chromedriver /usr/bin/chromedriver")
+os.system("chmod +x /usr/bin/chromedriver")
 
 # --- 🔐 API Key Setup ---
 API_KEY = os.getenv("GEMINI_API_KEY")  # Load API Key from Environment Variable
