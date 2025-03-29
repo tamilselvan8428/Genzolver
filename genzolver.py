@@ -7,6 +7,8 @@ import pyperclip
 import pyautogui
 from bs4 import BeautifulSoup
 
+os.system("Xvfb :1 -screen 0 1024x768x16 &")
+os.environ["DISPLAY"] = ":1"
 # --- 🔐 API Key Setup ---
 API_KEY = os.getenv("GEMINI_API_KEY")  # Load API Key from Environment Variable
 if not API_KEY:
