@@ -19,8 +19,8 @@ if not is_cloud:
     import pyperclip
 
 # --- 🌐 Streamlit UI Setup ---
-st.title("🤖 LeetCode Auto-Solver & Analytics Chatbot")
-st.write("Type 'Solve LeetCode [problem number]' or ask me anything!")
+st.title("🤖 LeetCode Auto-Solver & Auto-Submit")
+st.write("Type 'Solve LeetCode [problem number]' to start!")
 
 # --- 🗂 Cache LeetCode Problems ---
 @st.cache_data
@@ -41,19 +41,17 @@ def get_slug(pid):
     return problems_dict.get(pid)
 
 def open_problem(pid):
-    """Open the LeetCode problem only if it's not already open."""
+    """Open the LeetCode problem if not already open."""
     slug = get_slug(pid)
     if slug:
         url = f"https://leetcode.com/problems/{slug}/"
         webbrowser.open(url, new=2)  # Open in a new tab
-        time.sleep(7)
         return url
-    st.error("❌ Invalid problem number.")
     return None
 
 # --- 📝 Fetch Problem Statement ---
 def get_problem_statement(slug):
-    """Fetch the problem statement from LeetCode using GraphQL API."""
+    """Fetch problem statement using LeetCode GraphQL API."""
     try:
         query = {
             "query": """
@@ -80,9 +78,8 @@ def solve_with_gemini(pid, lang, text):
 Problem:  
 {text}
 Requirements:
-- Wrap the solution inside class Solution {{ public: ... }}.
 - Follow the LeetCode function signature.
-- Return only the full class definition with the method inside.
+- Return only the function/class definition.
 - Do NOT use code fences.
 Solution:"""
     
@@ -92,77 +89,53 @@ Solution:"""
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
-# --- 🔍 Page Verification ---
-def ensure_leetcode_page(pid):
-    """Ensure the correct LeetCode problem page is open."""
-    open_problem(pid)
-
-# --- 🛠 Solution Submission (Only for Local Mode) ---
-def focus_on_editor():
-    """Click inside the script editor and paste solution (only for local execution)."""
-    if is_cloud:
-        st.warning("⚠ Auto pasting is disabled in cloud mode. Please paste manually.")
-        return
+# --- 🛠 Automate Pasting, Running & Submitting ---
+def auto_paste_and_submit():
+    """Automates clicking, pasting, running, and submitting."""
+    time.sleep(5)  # Wait for page load
     
-    time.sleep(3)
-    pyautogui.click(x=1500, y=400)  # Adjust based on screen resolution
-    time.sleep(1)
-    pyautogui.hotkey('ctrl', 'a')  
-    pyautogui.hotkey('ctrl', 'v')  
+    # Click inside the code editor (adjust coordinates as needed)
+    pyautogui.click(x=1500, y=400)
     time.sleep(1)
 
-def submit_solution(pid, lang, sol):
-    """Automate the process of pasting and submitting solution on LeetCode (only locally)."""
-    if is_cloud:
-        st.warning("⚠ Auto submission is disabled in cloud mode. Please submit manually.")
-        return
-    
-    try:
-        st.info("🔍 Opening LeetCode page (only if needed)...")
-        ensure_leetcode_page(pid)
+    # Paste solution
+    pyautogui.hotkey('ctrl', 'a')  # Select all
+    pyautogui.hotkey('ctrl', 'v')  # Paste
+    time.sleep(1)
 
-        # Copy solution to clipboard
-        pyperclip.copy(sol)
+    # Run solution
+    pyautogui.hotkey('ctrl', '`')
+    time.sleep(8)
 
-        st.info("⌨ Clicking on editor and pasting solution...")
-        focus_on_editor()
+    # Check if run was successful (mock function)
+    if is_run_successful():
+        st.success("✅ Code executed successfully! Now submitting...")
 
-        # Run the solution
-        pyautogui.hotkey('ctrl', '`')
-        st.info("🚀 Running code...")
-        time.sleep(8)
+        # Submit solution
+        pyautogui.hotkey('ctrl', 'enter')
+        time.sleep(10)
 
-        if is_run_successful():
-            st.success("✅ Code executed successfully! Now submitting...")
-
-            # Submit the solution
-            pyautogui.hotkey('ctrl', 'enter')
-            st.info("🏆 Submitting solution...")
-            time.sleep(10)
-
-            if is_submission_successful():
-                st.success(f"✅ Problem {pid} submitted successfully!")
-            else:
-                st.error("❌ Submission failed. Retrying...")
-                submit_solution(pid, lang, sol)  # Retry if needed
+        if is_submission_successful():
+            st.success("🏆 Problem submitted successfully!")
         else:
-            st.error("❌ Run failed. Check the solution or retry.")
-    except Exception as e:
-        st.error(f"❌ PyAutoGUI Error: {e}")
+            st.error("❌ Submission failed. Retrying...")
+            auto_paste_and_submit()  # Retry
+    else:
+        st.error("❌ Run failed. Check the solution or retry.")
 
 # --- ✅ Verification Helpers ---
 def is_run_successful():
-    """Check if code execution was successful."""
+    """Mock function to check if run was successful."""
     time.sleep(5)
-    return True  # Mock function; replace with image detection if needed
+    return True  # Replace with image detection if needed
 
 def is_submission_successful():
-    """Check if submission was successful."""
+    """Mock function to check if submission was successful."""
     time.sleep(5)
-    return True  # Mock function; replace with image detection if needed
+    return True  # Replace with image detection if needed
 
 # --- 🎯 User Input Handling ---
-user_input = st.text_input("Your command or question:")
+user_input = st.text_input("Your command:")
 
 if user_input.lower().startswith("solve leetcode"):
     tokens = user_input.strip().split()
@@ -183,10 +156,17 @@ if user_input.lower().startswith("solve leetcode"):
                         import pyperclip
                         pyperclip.copy(solution)
                         st.success("✅ Solution copied! Now paste it manually in LeetCode.")
-                
-                # Local mode: Auto-submit
                 else:
-                    submit_solution(pid, lang, solution)
+                    # Local mode: Auto-Open LeetCode and submit
+                    st.info("🔍 Opening LeetCode page...")
+                    open_problem(pid)
+                    time.sleep(5)  # Wait for page load
+
+                    # Copy solution to clipboard
+                    pyperclip.copy(solution)
+
+                    # Automate pasting and submitting
+                    auto_paste_and_submit()
         else:
             st.error("❌ Invalid problem number.")
     else:
