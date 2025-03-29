@@ -1,6 +1,6 @@
-selenium
-beautifulsoup4
 streamlit
+selenium
 google-generativeai
+beautifulsoup4
 requests
 pyperclip

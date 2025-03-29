@@ -4,16 +4,18 @@ import requests
 import streamlit as st
 import google.generativeai as genai
 import pyperclip
-import pyautogui
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from bs4 import BeautifulSoup
 
-# --- Start a Virtual Display (required for pyautogui in headless environments) ---
-# This uses Xvfb; ensure it is installed in your environment.
-os.system("Xvfb :1 -screen 0 1920x1080x24 &")
-os.environ["DISPLAY"] = ":1"
+# ✅ Setup Headless Browser for Cloud Deployment
+CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
+GOOGLE_CHROME_PATH = "/usr/bin/google-chrome-stable"
 
-# --- 🔐 API Key Setup ---
-API_KEY = os.getenv("GEMINI_API_KEY")  # Set this in your environment
+# ✅ Set API Key for Gemini AI
+API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
     st.error("❌ API Key not found! Set 'GEMINI_API_KEY' environment variable.")
     st.stop()
@@ -21,7 +23,7 @@ if not API_KEY:
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
-# --- 🌐 Streamlit UI ---
+# ✅ Streamlit UI
 st.title("🤖 LeetCode Auto-Solver & Submission Bot")
 st.write("Type 'Solve LeetCode [problem number]' to get a solution!")
 
@@ -40,11 +42,11 @@ def fetch_problems():
 
 problems_dict = fetch_problems()
 
-def get_slug(pid):
+def get_slug(pid): 
     return problems_dict.get(pid)
 
 def get_problem_statement(slug):
-    """Fetch problem statement from LeetCode using GraphQL API."""
+    """Fetch problem statement from LeetCode using GraphQL API"""
     try:
         query = {
             "query": """
@@ -62,7 +64,7 @@ def get_problem_statement(slug):
     return "❌ Failed to fetch problem."
 
 def solve_with_gemini(pid, lang, text):
-    """Generate solution using Gemini AI."""
+    """Generate solution using Gemini AI"""
     if text.startswith("❌"):
         return "❌ Problem fetch failed."
     
@@ -75,18 +77,15 @@ Requirements:
 - Return only the full class definition with the method inside.
 - Do NOT use code fences.
 Solution:"""
+    
     try:
         res = model.generate_content(prompt)
         return res.text.strip()
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
-# --- 🚀 Automate LeetCode Execution using Keyboard Shortcuts ---
 def automate_submission(pid, lang, solution):
-    """
-    Automates opening a LeetCode problem, pasting the solution, running it, and submitting it 
-    by triggering keyboard shortcuts using pyautogui.
-    """
+    """Automates opening a LeetCode problem, pasting a solution, running, and submitting it."""
     slug = get_slug(pid)
     if not slug:
         st.error("❌ Invalid problem number.")
@@ -95,39 +94,51 @@ def automate_submission(pid, lang, solution):
     url = f"https://leetcode.com/problems/{slug}/"
     st.info(f"🌍 Opening {url}...")
 
-    # Step 1: Open a new tab in the browser (Ctrl + T)
-    pyautogui.hotkey('ctrl', 't')
-    time.sleep(1)
+    # ✅ Setup Chrome options for headless mode
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # Run without UI
+    options.add_argument("--no-sandbox")  # Required for cloud servers
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-dev-shm-usage")
+    options.binary_location = GOOGLE_CHROME_PATH  # Ensure correct binary
 
-    # Step 2: Paste the URL and hit Enter
-    pyperclip.copy(url)
-    pyautogui.hotkey('ctrl', 'v')
-    pyautogui.press('enter')
-    time.sleep(5)  # Wait for the page to load
+    # ✅ Initialize WebDriver
+    service = Service(CHROMEDRIVER_PATH)
+    driver = webdriver.Chrome(service=service, options=options)
+    driver.get(url)
+    time.sleep(5)
 
-    # Step 3: (If needed) wait a bit for manual login; adjust delay as required
-    time.sleep(3)
+    try:
+        # Find and click the code editor
+        editor = driver.find_element(By.CLASS_NAME, "monaco-editor")
+        editor.click()
+        time.sleep(1)
+        editor.send_keys(Keys.CONTROL, "a")  # Select all
+        editor.send_keys(solution)  # Paste solution
+    except Exception as e:
+        st.error(f"❌ Error pasting solution: {e}")
 
-    # Step 4: Paste the solution into the code editor
-    st.info("⌨ Pasting solution into editor...")
-    pyperclip.copy(solution)
-    pyautogui.hotkey('ctrl', 'a')  # Select all text in the editor
-    pyautogui.hotkey('ctrl', 'v')  # Paste solution
-    time.sleep(1)
+    # Click 'Run'
+    try:
+        run_button = driver.find_element(By.XPATH, "//button[contains(text(),'Run')]")
+        run_button.click()
+        st.info("🚀 Running solution...")
+        time.sleep(10)
+    except Exception as e:
+        st.error(f"❌ Error clicking Run: {e}")
 
-    # Step 5: Run the code by triggering Ctrl + '
-    st.info("🚀 Running solution...")
-    pyautogui.hotkey('ctrl', "'")
-    time.sleep(10)
+    # Click 'Submit'
+    try:
+        submit_button = driver.find_element(By.XPATH, "//button[contains(text(),'Submit')]")
+        submit_button.click()
+        st.success("✅ Solution submitted successfully!")
+        time.sleep(15)
+    except Exception as e:
+        st.error(f"❌ Error clicking Submit: {e}")
 
-    # Step 6: Submit the solution with Ctrl + Enter
-    st.info("🏆 Submitting solution...")
-    pyautogui.hotkey('ctrl', 'enter')
-    time.sleep(15)
+    driver.quit()
 
-    st.success("✅ Solution submitted successfully!")
-
-# --- 🎯 User Input Handling ---
+# ✅ Handle User Commands
 user_input = st.text_input("Your command or question:")
 
 if user_input.lower().startswith("solve leetcode"):
