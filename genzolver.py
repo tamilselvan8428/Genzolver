@@ -98,11 +98,15 @@ def automate_submission(pid, lang, solution):
         
         # Setup Selenium WebDriver
         options = webdriver.ChromeOptions()
-        options.add_argument("--start-maximized")
-        options.add_argument("--disable-infobars")
-        options.add_argument("--disable-popup-blocking")
+        options.add_argument("--headless")  # Run in headless mode
+        options.add_argument("--no-sandbox")  # Bypass OS-level sandbox
+        options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+        options.add_argument("--disable-gpu")  # Disable GPU usage
+        options.add_argument("--window-size=1920,1080")  # Set window size
 
+# Install the driver and launch browser
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
         driver.get(url)
 
         # Wait for the page to load
