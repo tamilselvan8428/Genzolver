@@ -4,13 +4,18 @@ import requests
 import streamlit as st
 import google.generativeai as genai
 import pyperclip
-import pyautogui
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from bs4 import BeautifulSoup
 
-os.system("Xvfb :1 -screen 0 1024x768x16 &")
-os.environ["DISPLAY"] = ":1"
-# --- 🔐 API Key Setup ---
-API_KEY = os.getenv("GEMINI_API_KEY")  # Load API Key from Environment Variable
+# ✅ Setup Headless Browser for Cloud Deployment
+CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
+GOOGLE_CHROME_PATH = "/usr/bin/google-chrome-stable"
+
+# ✅ Set API Key for Gemini AI
+API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
     st.error("❌ API Key not found! Set 'GEMINI_API_KEY' environment variable.")
     st.stop()
@@ -18,7 +23,7 @@ if not API_KEY:
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-1.5-pro-latest")
 
-# --- 🌐 Streamlit UI ---
+# ✅ Streamlit UI
 st.title("🤖 LeetCode Auto-Solver & Submission Bot")
 st.write("Type 'Solve LeetCode [problem number]' to get a solution!")
 
@@ -79,7 +84,6 @@ Solution:"""
     except Exception as e:
         return f"❌ Gemini Error: {e}"
 
-# --- 🚀 Automate LeetCode Execution using Shortcut Keys ---
 def automate_submission(pid, lang, solution):
     """Automates opening a LeetCode problem, pasting a solution, running, and submitting it."""
     slug = get_slug(pid)
@@ -90,35 +94,51 @@ def automate_submission(pid, lang, solution):
     url = f"https://leetcode.com/problems/{slug}/"
     st.info(f"🌍 Opening {url}...")
 
-    # Step 1: Open new tab and load LeetCode problem
-    pyautogui.hotkey('ctrl', 't')  # Open new tab
-    time.sleep(1)
-    pyperclip.copy(url)  # Copy URL to clipboard
-    pyautogui.hotkey('ctrl', 'v')  # Paste into search bar
-    pyautogui.press('enter')  # Open the page
-    time.sleep(5)  # Wait for the page to load
+    # ✅ Setup Chrome options for headless mode
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # Run without UI
+    options.add_argument("--no-sandbox")  # Required for cloud servers
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-dev-shm-usage")
+    options.binary_location = GOOGLE_CHROME_PATH  # Ensure correct binary
 
-    # Step 2: Wait for user to log in manually if needed
-    time.sleep(3)
+    # ✅ Initialize WebDriver
+    service = Service(CHROMEDRIVER_PATH)
+    driver = webdriver.Chrome(service=service, options=options)
+    driver.get(url)
+    time.sleep(5)
 
-    # Step 3: Paste the solution into the editor
-    pyperclip.copy(solution)  # Copy solution
-    pyautogui.hotkey('ctrl', 'a')  # Select all text
-    pyautogui.hotkey('ctrl', 'v')  # Paste solution
+    try:
+        # Find and click the code editor
+        editor = driver.find_element(By.CLASS_NAME, "monaco-editor")
+        editor.click()
+        time.sleep(1)
+        editor.send_keys(Keys.CONTROL, "a")  # Select all
+        editor.send_keys(solution)  # Paste solution
+    except Exception as e:
+        st.error(f"❌ Error pasting solution: {e}")
 
-    # Step 4: Run the code using Ctrl + '
-    st.info("🚀 Running solution...")
-    pyautogui.hotkey('ctrl', "'")
-    time.sleep(10)
+    # Click 'Run'
+    try:
+        run_button = driver.find_element(By.XPATH, "//button[contains(text(),'Run')]")
+        run_button.click()
+        st.info("🚀 Running solution...")
+        time.sleep(10)
+    except Exception as e:
+        st.error(f"❌ Error clicking Run: {e}")
 
-    # Step 5: Submit the code using Ctrl + Enter
-    st.info("🏆 Submitting solution...")
-    pyautogui.hotkey('ctrl', 'enter')
-    time.sleep(15)
+    # Click 'Submit'
+    try:
+        submit_button = driver.find_element(By.XPATH, "//button[contains(text(),'Submit')]")
+        submit_button.click()
+        st.success("✅ Solution submitted successfully!")
+        time.sleep(15)
+    except Exception as e:
+        st.error(f"❌ Error clicking Submit: {e}")
 
-    st.success("✅ Solution submitted successfully!")
+    driver.quit()
 
-# --- 🎯 User Input Handling ---
+# ✅ Handle User Commands
 user_input = st.text_input("Your command or question:")
 
 if user_input.lower().startswith("solve leetcode"):
